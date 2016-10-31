@@ -1,0 +1,14 @@
+<idea-plugin>
+    <id>TypingFreezeAnalyzer</id>
+    <name>TypingFreezeAnalyzer</name>
+    <version>0.1</version>
+    <vendor email="">dummy</vendor>
+
+    <description>Typing freeze analyzer plugin</description>
+    <change-notes>Initial release of the plugin</change-notes>
+    <idea-version since-build="131"/>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <toolWindow id="Thread dumps" secondary="true" anchor="right" factoryClass="org.compscicenter.typingFreezeAnalyzer.ThreadDumpToolWindow"/>
+    </extensions>
+</idea-plugin>
