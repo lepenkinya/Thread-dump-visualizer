@@ -15,12 +15,8 @@ class ObjenesisMorphiaObjectFactory : DefaultCreator() {
         try {
             val constructor = getNoArgsConstructor(clazz)
 
-            if (constructor != null) {
-                return constructor.newInstance()
-            }
-
             try {
-                return Objenesis.instance.getInstantiatorOf<T>(clazz).newInstance()
+                return constructor?.newInstance() ?: Objenesis.instance.getInstantiatorOf<T>(clazz).newInstance()
             } catch (e: Exception) {
                 throw MappingException("Failed to instantiate " + clazz.name, e)
             }
@@ -31,9 +27,7 @@ class ObjenesisMorphiaObjectFactory : DefaultCreator() {
 
     private fun <T> getNoArgsConstructor(ctorType: Class<T>): Constructor<T>? {
         try {
-            val ctor = ctorType.getDeclaredConstructor()
-            ctor.isAccessible = true
-            return ctor
+            return ctorType.getDeclaredConstructor().apply { isAccessible = true }
         } catch (e: NoSuchMethodException) {
             return null
         }

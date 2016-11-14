@@ -1,7 +1,6 @@
 package org.compscicenter.typingFreezeAnalyzer
 
 import com.intellij.openapi.fileEditor.FileEditorManager
-import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
@@ -19,7 +18,7 @@ import javax.swing.JTextArea
 import javax.swing.table.AbstractTableModel
 import javax.swing.table.DefaultTableCellRenderer
 
-class ThreadDumpToolWindow : ToolWindowFactory, DumbAware {
+class ThreadDumpToolWindow : ToolWindowFactory {
     lateinit var panel: JPanel
     lateinit var table: JTable
     lateinit var splitPane: JSplitPane
@@ -34,19 +33,17 @@ class ThreadDumpToolWindow : ToolWindowFactory, DumbAware {
         table.addMouseListener(object : MouseAdapter() {
             override fun mousePressed(e: MouseEvent) {
                 if (e.clickCount == 2) {
-                    val row = table.selectedRow
-                    val col = table.selectedColumn
+                    val (row, col) = table.selectedRow to table.selectedColumn
                     val name = table.getValueAt(row, col) as String
                     val dumpInfo = dumps[row]
-                    val fileEditorManager = FileEditorManager.getInstance(project)
 
-                    with(fileEditorManager) {
+                    with(FileEditorManager.getInstance(project)) {
                         val fileContent = createFileContent(dumpInfo)
                         val file = LightVirtualFile(name + ".txt", fileContent.text)
-                        openFile(file, true)
-                        createHyperLinks(fileContent.linkInfoList, project)
+                        val jTextArea = JTextArea("AWT thread waits: ${dumpInfo.getBlockingThreadNames()?.joinToString()}")
 
-                        val jTextArea = JTextArea("AWT thread waits: " + dumpInfo.getBlockingThreadNames()?.joinToString())
+                        openFile(file, true)
+                        enrichFile(fileContent, project)
                         addTopComponent(getSelectedEditor(file)!!, jTextArea)
                     }
                 }
@@ -76,7 +73,7 @@ class ThreadDumpToolWindow : ToolWindowFactory, DumbAware {
                                                        row: Int,
                                                        column: Int): Component {
                 val c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column)
-                c.foreground = if (dumps[row].isAWTThreadBlocked) Color.RED else Color.BLACK
+                c.foreground = if (dumps[row].isAWTThreadBlocked) Color.RED else Color.GRAY
                 return c
             }
         })
@@ -90,8 +87,9 @@ class ThreadDumpToolWindow : ToolWindowFactory, DumbAware {
 }
 
 fun createFileContent(dumpInfo: ThreadDumpInfo): FileContent {
-    val builder = StringBuilder()
-    val linkInfoList = ArrayList<LinkInfo>()
+    val text = StringBuilder()
+    val linkInfoList = ArrayList<ClassLinkInfo>()
+    val highlightInfoList = ArrayList<HighlightInfo>()
 
     dumpInfo.threadInfos
             .asSequence()
@@ -100,10 +98,10 @@ fun createFileContent(dumpInfo: ThreadDumpInfo): FileContent {
                 if (dumpInfo.isAWTThreadBlocked) {
                     it.isAWTThread() || it.isPerformingRunReadAction()
                 } else {
-                    true
+                    true // TODO think about what to filter if AWT thread has state running
                 }
             }
-            .forEach { dumpThreadInfo(it, builder, linkInfoList) }
+            .forEach { dumpThreadInfo(it, text, linkInfoList, highlightInfoList) }
 
-    return FileContent(builder.toString(), linkInfoList)
+    return FileContent(text.toString(), linkInfoList, highlightInfoList)
 }
