@@ -18,7 +18,7 @@ class ObjenesisMorphiaObjectFactory : DefaultCreator() {
             try {
                 return constructor?.newInstance() ?: Objenesis.instance.getInstantiatorOf<T>(clazz).newInstance()
             } catch (e: Exception) {
-                throw MappingException("Failed to instantiate " + clazz.name, e)
+                throw MappingException("Failed to instantiate ${clazz.name}", e)
             }
         } catch (e: Exception) {
             throw RuntimeException(e)

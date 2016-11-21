@@ -2,19 +2,18 @@ package org.compscicenter.typingFreezeAnalyzer
 
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.testFramework.LightVirtualFile
-import java.awt.Color
+import com.intellij.uml.UmlGraphBuilderFactory
+import java.awt.BorderLayout
 import java.awt.Component
 import java.awt.Dimension
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import java.util.*
-import javax.swing.JPanel
-import javax.swing.JSplitPane
-import javax.swing.JTable
-import javax.swing.JTextArea
+import javax.swing.*
 import javax.swing.table.AbstractTableModel
 import javax.swing.table.DefaultTableCellRenderer
 
@@ -26,33 +25,37 @@ class ThreadDumpToolWindow : ToolWindowFactory {
 
     override fun init(window: ToolWindow?) {
         super.init(window)
-        dumps = ThreadDumpDaoMongo().getAllThreadDumps()
+        dumps = ThreadDumpDaoMongo().getAllThreadDumps().sortedByDescending { it.awtThread.getStateColor().weight() }
     }
 
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
         table.addMouseListener(object : MouseAdapter() {
             override fun mousePressed(e: MouseEvent) {
-                if (e.clickCount == 2) {
-                    val (row, col) = table.selectedRow to table.selectedColumn
-                    val name = table.getValueAt(row, col) as String
-                    val dumpInfo = dumps[row]
+                if (e.clickCount != 2) return
 
-                    with(FileEditorManager.getInstance(project)) {
-                        val fileContent = createFileContent(dumpInfo)
-                        val file = LightVirtualFile(name + ".txt", fileContent.text)
-                        val jTextArea = JTextArea("AWT thread waits: ${dumpInfo.getBlockingThreadNames()?.joinToString()}")
+                val (row, col) = table.selectedRow to table.selectedColumn
+                val name = table.getValueAt(row, col) as String
+                val dumpInfo = dumps[row]
 
-                        openFile(file, true)
-                        enrichFile(fileContent, project)
-                        addTopComponent(getSelectedEditor(file)!!, jTextArea)
-                    }
+                with(FileEditorManager.getInstance(project)) {
+                    val fileContent = createFileContent(dumpInfo)
+                    val file = LightVirtualFile("$name.txt", fileContent.text)
+                    val jTextArea = JTextArea("AWT thread waits: ${dumpInfo.getBlockingThreadNames().joinToString()}")
+
+                    openFile(file, true)
+                    enrichFile(project, fileContent)
+                    addTopComponent(getSelectedEditor(file)!!, jTextArea)
+
+                    splitPane.topComponent = createDiagramComponent(project, file, dumpInfo, fileContent)
+                    splitPane.dividerLocation = splitPane.size.height / 2
                 }
             }
         })
 
-        val contentManager = toolWindow.contentManager
-        contentManager.addContent(contentManager.factory.createContent(splitPane, "", false))
-        toolWindow.isAutoHide = false
+        toolWindow.apply {
+            contentManager.addContent(contentManager.factory.createContent(splitPane, "", false))
+            isAutoHide = false
+        }
     }
 
     fun createUIComponents() {
@@ -62,7 +65,7 @@ class ThreadDumpToolWindow : ToolWindowFactory {
             override fun getColumnName(column: Int) = "Thread dump id"
             override fun getRowCount() = dumps.size
             override fun getColumnCount() = 1
-            override fun getValueAt(rowIndex: Int, columnIndex: Int) = dumps[rowIndex].objectId.toString()
+            override fun getValueAt(rowIndex: Int, columnIndex: Int) = "${dumps[rowIndex].objectId}"
         })
 
         table.setDefaultRenderer(Any::class.java, object : DefaultTableCellRenderer() {
@@ -72,17 +75,17 @@ class ThreadDumpToolWindow : ToolWindowFactory {
                                                        hasFocus: Boolean,
                                                        row: Int,
                                                        column: Int): Component {
-                val c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column)
-                c.foreground = if (dumps[row].isAWTThreadBlocked) Color.RED else Color.GRAY
-                return c
+                val component = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column)
+                return component.apply { foreground = dumps[row].awtThread.getStateColor() }
             }
         })
 
-        splitPane = JSplitPane(JSplitPane.VERTICAL_SPLIT, JTextArea("This is place for diagram"), table)
-        splitPane.size = Dimension(300, 700)
-        splitPane.dividerSize = 5
-        splitPane.dividerLocation = splitPane.size.height / 2
-        splitPane.resizeWeight = 0.5
+        splitPane = JSplitPane(JSplitPane.VERTICAL_SPLIT, JTextArea("Please select thread dump"), table).apply {
+            size = Dimension(200, 700)
+            dividerSize = 5
+            dividerLocation = size.height / 2
+            resizeWeight = 0.5
+        }
     }
 }
 
@@ -95,13 +98,32 @@ fun createFileContent(dumpInfo: ThreadDumpInfo): FileContent {
             .asSequence()
             .filter { it.isSignificant() }
             .filter {
-                if (dumpInfo.isAWTThreadBlocked) {
+                if (dumpInfo.isAWTThreadWaiting) {
                     it.isAWTThread() || it.isPerformingRunReadAction()
                 } else {
-                    true // TODO think about what to filter if AWT thread has state running
+                    true // TODO think about what to filter if AWT threadInfo has state running
                 }
             }
             .forEach { dumpThreadInfo(it, text, linkInfoList, highlightInfoList) }
 
-    return FileContent(text.toString(), linkInfoList, highlightInfoList)
+    return FileContent("$text", linkInfoList, highlightInfoList)
+}
+
+fun createDiagramComponent(project: Project,
+                           file: VirtualFile,
+                           dumpInfo: ThreadDumpInfo,
+                           fileContent: FileContent): JComponent {
+    val panel = JPanel().apply { layout = BorderLayout() }
+    val stringDiagramProvider = StringDiagramProvider(project, file, dumpInfo.getDependencyGraph(), fileContent)
+    val builder = UmlGraphBuilderFactory.create(project, stringDiagramProvider, null, null).apply {
+        update()
+        view.fitContent()
+        view.updateView()
+        dataModel.setModelInitializationFinished()
+    }
+
+    return panel.apply { add(builder.view.jComponent) }
+}
+
+fun main(args: Array<String>) {
 }

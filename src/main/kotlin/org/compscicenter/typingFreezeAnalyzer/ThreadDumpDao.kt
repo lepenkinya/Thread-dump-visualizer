@@ -7,6 +7,7 @@ import org.mongodb.morphia.Datastore
 import org.mongodb.morphia.Morphia
 import org.mongodb.morphia.converters.TypeConverter
 import org.mongodb.morphia.mapping.MappedField
+import org.mongodb.morphia.query.Query
 import java.lang.management.LockInfo
 
 object DatabaseInfo {
@@ -34,14 +35,9 @@ class ThreadDumpDaoMongo : ThreadDumpDao {
                 return LockInfo(basicDBObject.get("className") as String, basicDBObject.get("identityHashCode") as Int)
             }
         })
-
     }
 
-    override fun getAllThreadDumps(): List<ThreadDumpInfo> {
-        return dataStore.createQuery(ThreadDumpInfo::class.java).asList()
-    }
-
-    override fun getThreadDump(objectId: ObjectId): ThreadDumpInfo {
-        return dataStore.createQuery(ThreadDumpInfo::class.java).field("objectId").equal(objectId).asList()[0]
-    }
+    fun getQuery(): Query<ThreadDumpInfo> = dataStore.createQuery(ThreadDumpInfo::class.java)
+    override fun getAllThreadDumps(): List<ThreadDumpInfo> = getQuery().asList()
+    override fun getThreadDump(objectId: ObjectId): ThreadDumpInfo = getQuery().field("objectId").equal(objectId).get()
 }
