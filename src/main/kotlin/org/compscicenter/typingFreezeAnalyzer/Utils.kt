@@ -14,10 +14,12 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.ui.JBColor
+import com.intellij.uml.UmlGraphBuilderFactory
 import java.awt.Color
 import java.awt.Font
 import java.lang.management.ThreadInfo
 import java.util.*
+import javax.swing.JComponent
 
 fun getReadableState(state: Thread.State) = when (state) {
     Thread.State.BLOCKED -> "blocked"
@@ -96,15 +98,10 @@ fun highlightThreadState(info: ThreadInfo,
 }
 
 
-fun ThreadInfo.isYielding(): Boolean {
-    if (stackTrace == null || stackTrace.isEmpty() || stackTrace[0].methodName == null) return false
-    return "yield" in stackTrace[0].methodName
-}
-
 fun ThreadInfo.getStateColor(): Color = when (threadState) {
-    Thread.State.BLOCKED, Thread.State.WAITING, Thread.State.TIMED_WAITING -> JBColor.RED
-    Thread.State.RUNNABLE -> if (isYielding()) JBColor.YELLOW else JBColor.GREEN
-    else -> JBColor.GREEN
+    Thread.State.BLOCKED, Thread.State.WAITING, Thread.State.TIMED_WAITING -> Color.RED
+    Thread.State.RUNNABLE -> if (isYielding()) Color.YELLOW else Color.GREEN
+    else -> Color.GREEN
 }
 
 fun ThreadInfo.isSignificant(vararg packagesToSkip: String = arrayOf("java", "sun", "com.sun")) = when (stackTrace) {
@@ -114,10 +111,10 @@ fun ThreadInfo.isSignificant(vararg packagesToSkip: String = arrayOf("java", "su
             .any { stackTrace -> packagesToSkip.none { stackTrace.className.startsWith(it) } }
 }
 
-fun Color.weight() = when (this) {
-    JBColor.RED -> 3
-    JBColor.YELLOW -> 2
-    JBColor.GREEN -> 1
+fun ThreadInfo.weight() = when (getStateColor()) {
+    Color.RED -> 3
+    Color.YELLOW -> 2
+    Color.GREEN -> 1
     else -> 0
 }
 
@@ -126,9 +123,15 @@ fun ThreadInfo.isPerformingRunReadAction() = when (stackTrace) {
     else -> stackTrace.asSequence().filter { it.methodName != null }.any { it.isPerformingRunReadAction() }
 }
 
+fun ThreadInfo.isYielding() = when {
+    stackTrace == null || stackTrace.isEmpty() || stackTrace[0].methodName == null -> false
+    else -> "yield" in stackTrace[0].methodName
+}
 fun ThreadInfo.isAWTThread() = threadName.startsWith("AWT-EventQueue")
 fun ThreadDumpInfo.findThreadById(id: Long) = threadInfos.find { it.threadId == id }
-fun ThreadDumpInfo.getBlockingThreads() = threadInfos.filter { it.isPerformingRunReadAction() }
+fun ThreadDumpInfo.getBlockingThreads() = threadInfos.filter {
+    it.isPerformingRunReadAction() && ((it.threadState == Thread.State.RUNNABLE && !it.isYielding()) || it.lockOwnerId != -1L)
+}
 fun ThreadDumpInfo.getBlockingThreadNames() = getBlockingThreads().map { it.threadName }
 fun StackTraceElement.isResolvable() = className != null && fileName != null && !isNativeMethod && lineNumber >= 0
 fun StackTraceElement.isPerformingRunReadAction() = methodName.contains("runReadAction", ignoreCase = true)
@@ -186,10 +189,44 @@ fun ThreadDumpInfo.getDependencyGraph(): List<Pair<ThreadInfo, ThreadInfo>> {
     return dependencyGraph
 }
 
+fun FileContent.getThreadStateOffset(threadId: Long) = highlightInfoList.asSequence()
+        .filter { it.threadInfo.threadId == threadId }
+        .find { it.highlightType == HighlightType.THREAD_STATE }?.startOffset
+
 fun FileContent.getReadActionOffset(threadId: Long) = highlightInfoList.asSequence()
         .filter { it.threadInfo.threadId == threadId }
-        .find { it.highlightType == HighlightType.READ_ACTION }?.startOffset ?: 0
+        .find { it.highlightType == HighlightType.READ_ACTION }?.startOffset
+
+fun createFileContent(dumpInfo: ThreadDumpInfo): FileContent {
+    val text = StringBuilder()
+    val linkInfoList = ArrayList<ClassLinkInfo>()
+    val highlightInfoList = ArrayList<HighlightInfo>()
+
+    dumpInfo.threadInfos
+            .asSequence()
+            .filter { it.isSignificant() }
+            .forEach { dumpThreadInfo(it, text, linkInfoList, highlightInfoList) }
+
+    return FileContent("$text", linkInfoList, highlightInfoList)
+}
+
+fun createDiagramComponent(project: Project,
+                           file: VirtualFile,
+                           dumpInfo: ThreadDumpInfo,
+                           fileContent: FileContent): JComponent {
+    val stringDiagramProvider = ThreadInfoDiagramProvider(project, file, dumpInfo.getDependencyGraph(), fileContent)
+    val builder = UmlGraphBuilderFactory.create(project, stringDiagramProvider, null, null).apply {
+        update()
+        view.fitContent()
+        view.updateView()
+        dataModel.setModelInitializationFinished()
+    }
+
+    return builder.view.jComponent
+}
 
 fun main(args: Array<String>) {
-    ThreadDumpDaoMongo().getAllThreadDumps().forEach { println(createFileContent(it).text) }
+    ThreadDumpDaoMongo().getAllThreadDumps().forEach {
+        println(createFileContent(it).text)
+    }
 }

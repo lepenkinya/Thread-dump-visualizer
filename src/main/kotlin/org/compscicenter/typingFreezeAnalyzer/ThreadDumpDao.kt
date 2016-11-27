@@ -7,22 +7,22 @@ import org.mongodb.morphia.Datastore
 import org.mongodb.morphia.Morphia
 import org.mongodb.morphia.converters.TypeConverter
 import org.mongodb.morphia.mapping.MappedField
-import org.mongodb.morphia.query.Query
 import java.lang.management.LockInfo
-
-object DatabaseInfo {
-    const val DB_NAME = "test"
-    const val TABLE_NAME = "ThreadDumps"
-}
 
 interface ThreadDumpDao {
     fun getAllThreadDumps(): List<ThreadDumpInfo>
     fun getThreadDump(objectId: ObjectId): ThreadDumpInfo
 }
 
-class ThreadDumpDaoMongo : ThreadDumpDao {
+class ThreadDumpDaoMongo(map: Map<String, Any>) : ThreadDumpDao {
+    constructor(host: String = "127.0.0.1",
+                port: Int = 27017,
+                dbName: String = "test") : this(mapOf("host" to host, "port" to port, "dbName" to dbName))
+    val host: String by map
+    val port: Int by map
+    val dbName: String by map
     val morphia = Morphia()
-    val dataStore: Datastore = morphia.createDatastore(MongoClient(), DatabaseInfo.DB_NAME)
+    val dataStore: Datastore = morphia.createDatastore(MongoClient(host, port), dbName)
 
     init {
         dataStore.ensureIndexes()
@@ -37,7 +37,11 @@ class ThreadDumpDaoMongo : ThreadDumpDao {
         })
     }
 
-    fun getQuery(): Query<ThreadDumpInfo> = dataStore.createQuery(ThreadDumpInfo::class.java)
-    override fun getAllThreadDumps(): List<ThreadDumpInfo> = getQuery().asList()
-    override fun getThreadDump(objectId: ObjectId): ThreadDumpInfo = getQuery().field("objectId").equal(objectId).get()
+    override fun getAllThreadDumps(): List<ThreadDumpInfo> {
+        return dataStore.createQuery(ThreadDumpInfo::class.java).asList()
+    }
+
+    override fun getThreadDump(objectId: ObjectId): ThreadDumpInfo {
+        return dataStore.createQuery(ThreadDumpInfo::class.java).field("objectId").equal(objectId).get()
+    }
 }

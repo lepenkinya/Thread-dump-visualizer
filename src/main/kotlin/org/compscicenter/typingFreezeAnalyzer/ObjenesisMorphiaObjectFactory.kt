@@ -6,11 +6,11 @@ import org.objenesis.ObjenesisStd
 
 import java.lang.reflect.Constructor
 
-class ObjenesisMorphiaObjectFactory : DefaultCreator() {
-    object Objenesis {
-        val instance = ObjenesisStd()
-    }
+object Objenesis {
+    val instance = ObjenesisStd()
+}
 
+class ObjenesisMorphiaObjectFactory : DefaultCreator() {
     override fun <T : Any> createInstance(clazz: Class<T>): T {
         try {
             val constructor = getNoArgsConstructor(clazz)

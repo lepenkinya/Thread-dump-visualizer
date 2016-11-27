@@ -29,14 +29,10 @@ class FileContent(val text: String,
                   val classLinkInfoList: List<ClassLinkInfo>,
                   val highlightInfoList: List<HighlightInfo>)
 
-@Entity(DatabaseInfo.TABLE_NAME)
+@Entity("ThreadDumps")
 class ThreadDumpInfo() {
-    @delegate:Transient val awtThread : ThreadInfo by lazy {
+    @delegate:Transient val awtThread: ThreadInfo by lazy {
         threadInfos.find { it.isAWTThread() } ?: throw IllegalStateException("AWT thread is missed")
-    }
-    @delegate:Transient val isAWTThreadWaiting: Boolean by lazy {
-        val waitingStates = setOf(Thread.State.TIMED_WAITING, Thread.State.WAITING, Thread.State.BLOCKED)
-        (awtThread.threadState in waitingStates) || awtThread.isYielding()
     }
     @Id lateinit var objectId: ObjectId
     lateinit var version: String

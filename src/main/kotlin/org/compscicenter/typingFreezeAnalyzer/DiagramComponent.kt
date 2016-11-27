@@ -1,6 +1,7 @@
 package org.compscicenter.typingFreezeAnalyzer
 
 import com.intellij.diagram.*
+import com.intellij.diagram.components.DiagramNodeContainer
 import com.intellij.diagram.extras.DiagramExtras
 import com.intellij.diagram.extras.EditNodeHandler
 import com.intellij.diagram.presentation.DiagramState
@@ -8,21 +9,27 @@ import com.intellij.openapi.actionSystem.DataContext
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.ModificationTracker
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.ui.JBColor
+import java.awt.Color
+import java.awt.Point
 import java.awt.Shape
 import java.lang.management.ThreadInfo
 import java.util.*
+import javax.swing.JComponent
+import javax.swing.JPanel
 
-object DefaultDiagramRelationshipInfo : DiagramRelationshipInfoAdapter(null) {
+object ThreadInfoDiagramRelationship : DiagramRelationshipInfoAdapter(null) {
     override fun getStartArrow(): Shape = DiagramRelationshipInfo.DIAMOND
 }
 
-object DefaultVfsResolver : DiagramVfsResolver<ThreadInfo> {
+object ThreadInfoVfsResolver : DiagramVfsResolver<ThreadInfo> {
     override fun getQualifiedName(element: ThreadInfo): String = element.threadName
     override fun resolveElementByFQN(fqn: String?, project: Project?) = null
 }
 
-object DefaultDiagramElementManager : AbstractDiagramElementManager<ThreadInfo>() {
+object ThreadInfoDiagramElementManager : AbstractDiagramElementManager<ThreadInfo>() {
     override fun getNodeTooltip(element: ThreadInfo) = null
     override fun findInDataContext(context: DataContext?) = null
     override fun isAcceptableAsNode(element: Any?) = element != null
@@ -30,26 +37,64 @@ object DefaultDiagramElementManager : AbstractDiagramElementManager<ThreadInfo>(
     override fun getItemName(element: Any?, presentation: DiagramState?) = null
 }
 
-object DefaultDiagramColorManager : DiagramColorManagerBase() {
-    override fun getNodeHeaderColor(builder: DiagramBuilder?, node: DiagramNode<*>?) =
-            (node?.identifyingElement as ThreadInfo).getStateColor()
-//    override fun getNodeForegroundColor(selected: Boolean): Color? = JBColor.WHITE
-//    override fun getNodeBackground(project: Project?, nodeElement: Any?, selected: Boolean): Color = JBColor.WHITE
+object ThreadInfoDiagramColorManager : DiagramColorManagerBase() {
+    override fun getNodeHeaderColor(builder: DiagramBuilder?, node: DiagramNode<*>?): Color {
+        val threadInfo = (node?.identifyingElement as? ThreadInfo) ?: return JBColor.RED
+
+        return threadInfo.getStateColor()
+    }
 }
 
-class DefaultDiagramExtras(val project: Project,
-                           val file: VirtualFile,
-                           val fileContent: FileContent) : DiagramExtras<ThreadInfo>() {
+class ThreadInfoDiagramExtras(val project: Project,
+                              val file: VirtualFile,
+                              val fileContent: FileContent) : DiagramExtras<ThreadInfo>() {
     override fun getEditNodeHandler(): EditNodeHandler<ThreadInfo> {
         return EditNodeHandler { diagramNode, diagramPresentationModel ->
-            val thread = diagramNode.identifyingElement
-            val offset = if (thread.isAWTThread()) 1 else fileContent.getReadActionOffset(thread.threadId)
+            val threadId = diagramNode.identifyingElement.threadId
+            val offset = fileContent.run { getReadActionOffset(threadId) ?: getThreadStateOffset(threadId) ?: 0 }
             val editorIsOpen = FileEditorManager.getInstance(project).getSelectedEditor(file) != null
+
+//            PropertiesComponent.getInstance().setValue("dump.viewer.last.path", "")
 
             OpenFileDescriptor(project, file, offset).navigate(true)
             if (!editorIsOpen) enrichFile(project, fileContent)
         }
     }
+
+    override fun createNodeComponent(node: DiagramNode<ThreadInfo>?,
+                                     builder: DiagramBuilder?,
+                                     basePoint: Point?,
+                                     wrapper: JPanel?): JComponent {
+        return (super.createNodeComponent(node, builder, basePoint, wrapper) as DiagramNodeContainer).apply {
+            // TODO rewrite this hack ( but maybe it is ok? )
+            synchronized(treeLock) {
+                (header.components[0] as JComponent).components[0].foreground = Color.BLACK
+            }
+        }
+    }
+}
+
+class ThreadInfoDiagramDataModel(project: Project,
+                                 provider: DiagramProvider<ThreadInfo>,
+                                 dependencies: List<Pair<ThreadInfo, ThreadInfo>>) : DiagramDataModel<ThreadInfo>(project, provider) {
+    val nodesMap = HashMap<String, ThreadInfoNode>()
+    val edgeList = ArrayList<ThreadInfoEdge>().apply {
+        dependencies.forEach {
+            val (blocked, blocking) = it
+            val x = nodesMap.getOrPut(blocked.threadName, { ThreadInfoNode(blocked, provider) })
+            val y = nodesMap.getOrPut(blocking.threadName, { ThreadInfoNode(blocking, provider) })
+
+            add(ThreadInfoEdge(x, y))
+        }
+    }
+
+    override fun dispose() = Unit
+    override fun getNodes() = nodesMap.values
+    override fun getEdges() = edgeList
+    override fun getNodeName(node: DiagramNode<ThreadInfo>): String = node.identifyingElement.threadName
+    override fun addElement(element: ThreadInfo) = null
+    override fun refreshDataModel() = Unit
+    override fun getModificationTracker(): ModificationTracker = NEVER_CHANGED
 }
 
 class ThreadInfoNode(val threadInfo: ThreadInfo,
@@ -59,47 +104,24 @@ class ThreadInfoNode(val threadInfo: ThreadInfo,
     override fun getIdentifyingElement() = threadInfo
 }
 
-class StringEdge(source: ThreadInfoNode,
-                 target: ThreadInfoNode) : DiagramEdgeBase<ThreadInfo>(source, target, DefaultDiagramRelationshipInfo)
+class ThreadInfoEdge(source: ThreadInfoNode,
+                     target: ThreadInfoNode) : DiagramEdgeBase<ThreadInfo>(source, target, ThreadInfoDiagramRelationship)
 
-class StringDiagramProvider(val project: Project,
-                            val file: VirtualFile,
-                            val dependencies: List<Pair<ThreadInfo, ThreadInfo>>,
-                            val fileContent: FileContent) : BaseDiagramProvider<ThreadInfo>() {
-    val PROVIDER_ID = "StringDiagramProvider"
+class ThreadInfoDiagramProvider(val project: Project,
+                                val file: VirtualFile,
+                                val dependencies: List<Pair<ThreadInfo, ThreadInfo>>,
+                                val fileContent: FileContent) : BaseDiagramProvider<ThreadInfo>() {
+    val PROVIDER_ID = "ThreadInfoDiagramProvider"
     override fun getID() = PROVIDER_ID
     override fun getPresentableName(): String = "My ID"
-    override fun getElementManager() = DefaultDiagramElementManager
-    override fun getVfsResolver() = DefaultVfsResolver
-    override fun getColorManager() = DefaultDiagramColorManager
-    override fun getExtras() = DefaultDiagramExtras(project, file, fileContent)
-//    override fun createPresentationModel(project: Project?, graph: Graph2D?): DiagramPresentationModel? {
-//        return DiagramPresentationModelImpl(graph, project, this)
-//    }
-
-
+    override fun getElementManager() = ThreadInfoDiagramElementManager
+    override fun getVfsResolver() = ThreadInfoVfsResolver
+    override fun getColorManager() = ThreadInfoDiagramColorManager
+    override fun getExtras() = ThreadInfoDiagramExtras(project, file, fileContent)
     override fun createDataModel(project: Project,
                                  element: ThreadInfo?,
                                  file: VirtualFile?,
                                  presentationModel: DiagramPresentationModel?): DiagramDataModel<ThreadInfo> {
-        return object : DiagramDataModel<ThreadInfo>(project, this) {
-            val nodesMap = HashMap<String, ThreadInfoNode>()
-            val edgeList = ArrayList<StringEdge>().apply {
-                dependencies.forEach {
-                    val x = nodesMap.getOrPut(it.first.threadName, { ThreadInfoNode(it.first, this@StringDiagramProvider) })
-                    val y = nodesMap.getOrPut(it.second.threadName, { ThreadInfoNode(it.second, this@StringDiagramProvider) })
-
-                    add(StringEdge(x, y))
-                }
-            }
-
-            override fun dispose() = Unit
-            override fun getNodes() = nodesMap.values
-            override fun getEdges() = edgeList
-            override fun getNodeName(node: DiagramNode<ThreadInfo>) = node.identifyingElement.threadName
-            override fun addElement(element: ThreadInfo) = null
-            override fun refreshDataModel() = Unit
-            override fun getModificationTracker() = NEVER_CHANGED
-        }
+        return ThreadInfoDiagramDataModel(project, this@ThreadInfoDiagramProvider, dependencies)
     }
 }
