@@ -29,6 +29,9 @@ class FileContent(val text: String,
                   val classLinkInfoList: List<ClassLinkInfo>,
                   val highlightInfoList: List<HighlightInfo>)
 
+
+//todo if you can build this from file dumps - that would be cool
+
 @Entity("ThreadDumps")
 class ThreadDumpInfo() {
     @delegate:Transient val awtThread: ThreadInfo by lazy {
