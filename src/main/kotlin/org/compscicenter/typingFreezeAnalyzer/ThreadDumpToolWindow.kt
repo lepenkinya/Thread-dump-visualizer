@@ -159,20 +159,24 @@ class FileDropHandler(val panel: JPanel,
             else -> null
         } ?: return
 
-        val dataFlavor = event.transferDataFlavors?.find { it == DataFlavor.stringFlavor } ?: return
-        val path = transferable.getTransferData(dataFlavor) as? String ?: return
-        val file = File(URL(path).toURI())
-        if (file.extension != "dbconf") return
+        val fileList = event.transferDataFlavors.find { it == DataFlavor.javaFileListFlavor }
+        val files = transferable.getTransferData(fileList) as? List<File> ?: return
+        if (files.isEmpty()) return
 
-        try {
+
+        val file = files[0]
+        if (file.extension == "dbconf") {
             val prop: Map<String, Any> = Jackson.mapper.readValue(file, object : TypeReference<HashMap<String, Any>>() {})
-
             dumps = ThreadDumpDaoMongo(prop).getAllThreadDumps().sortedByDescending {
                 it.awtThread.weight()
             }
-        } catch (e: Exception) {
-            throw e // TODO create jpopup here
         }
+
+//        val dataFlavor = event.transferDataFlavors?.find { it == DataFlavor.stringFlavor } ?: return
+//        val path = transferable.getTransferData(dataFlavor) as? String ?: return
+//        val file = File(URL(path).toURI())
+//        if (file.extension != "dbconf") return
+
 
 //        JBPopupFactory.getInstance()
 //                .createComponentPopupBuilder(JPanel(), null)
