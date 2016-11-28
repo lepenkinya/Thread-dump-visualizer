@@ -14,6 +14,7 @@ interface ThreadDumpDao {
     fun getThreadDump(objectId: ObjectId): ThreadDumpInfo
 }
 
+//todo pass MongoConfig object here, statical typing is badass!
 class ThreadDumpDaoMongo(map: Map<String, Any>) : ThreadDumpDao {
     constructor(host: String = "127.0.0.1", port: Int = 27017, dbName: String = "test")
             : this(mapOf("host" to host, "port" to port, "dbName" to dbName))

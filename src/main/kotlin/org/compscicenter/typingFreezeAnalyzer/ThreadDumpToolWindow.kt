@@ -37,6 +37,7 @@ class ThreadDumpToolWindow : ToolWindowFactory {
     }
 
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
+        //why it is synchronized?
         val jTextArea = synchronized(dropPanel.treeLock) { dropPanel.components[0] as JComponent }
 
         DnDSupport.createBuilder(jTextArea)
@@ -102,6 +103,8 @@ class FileDropHandler(val panel: JPanel,
 
         dumps.forEach { root.add(DefaultMutableTreeNode(it)) }
 
+        //todo very long initialization, 
+        //todo general rule of thumb - if method is more than 10 lines of code, probably it's doing too much
         val jTree = JTree(root).apply {
             expandPath(TreePath(model.root))
 
@@ -146,7 +149,11 @@ class FileDropHandler(val panel: JPanel,
                 }
             })
         }
-
+        
+        //todo To me this looks more straightforward
+        //val pane = JScrollPane(jTree)
+        //pane.border = BorderFactory.createEmptyBorder()
+        
         return JScrollPane(jTree).apply { border = BorderFactory.createEmptyBorder() }
     }
 
@@ -185,7 +192,8 @@ class FileDropHandler(val panel: JPanel,
 //                .showInFocusCenter()
 
         panel.remove(dropPanel)
-
+        
+        //todo here I think it's okay
         splitPane.apply {
             bottomComponent = createTree()
             topComponent = createSelectPane()

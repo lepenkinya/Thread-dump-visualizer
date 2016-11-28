@@ -74,6 +74,24 @@ class ThreadInfoDiagramExtras(val project: Project,
     }
 }
 
+
+class ThreadDumpPresentation {
+    val threadName = "AWT"
+    val onClick = Runnable { println("click") }
+    
+    
+    /**
+     * Probably this is all you need to pass to DiagramModel
+     * And list of dependencies from ThreadDumpPresentation to ThreadDumpPresentation
+     */
+}
+
+//do not use pair, most of the times it becomes confusing
+class ThreadDumpDependency(val working: ThreadDumpPresentation, val waiting: ThreadDumpPresentation)
+
+
+//todo like even here diagram should not know anything about ThreadInfo, 
+//todo it just shows dependencies, and make navigation available
 class ThreadInfoDiagramDataModel(project: Project,
                                  provider: DiagramProvider<ThreadInfo>,
                                  dependencies: List<Pair<ThreadInfo, ThreadInfo>>) : DiagramDataModel<ThreadInfo>(project, provider) {
