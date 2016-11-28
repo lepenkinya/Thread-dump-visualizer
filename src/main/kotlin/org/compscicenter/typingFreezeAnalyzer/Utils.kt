@@ -123,15 +123,26 @@ fun ThreadInfo.isPerformingRunReadAction() = when (stackTrace) {
     else -> stackTrace.asSequence().filter { it.methodName != null }.any { it.isPerformingRunReadAction() }
 }
 
+fun Color.stringName() = when (this) {
+    Color.RED -> "red"
+    Color.GREEN -> "green"
+    Color.YELLOW -> "yellow"
+    else -> "undefined"
+}
+
 fun ThreadInfo.isYielding() = when {
     stackTrace == null || stackTrace.isEmpty() || stackTrace[0].methodName == null -> false
     else -> "yield" in stackTrace[0].methodName
 }
+
+fun ThreadInfo.isRunning() = threadState == Thread.State.RUNNABLE && !isYielding()
+
 fun ThreadInfo.isAWTThread() = threadName.startsWith("AWT-EventQueue")
 fun ThreadDumpInfo.findThreadById(id: Long) = threadInfos.find { it.threadId == id }
 fun ThreadDumpInfo.getBlockingThreads() = threadInfos.filter {
-    it.isPerformingRunReadAction() && ((it.threadState == Thread.State.RUNNABLE && !it.isYielding()) || it.lockOwnerId != -1L)
+    it.isPerformingRunReadAction() && (it.isRunning() || it.lockOwnerId != -1L)
 }
+
 fun ThreadDumpInfo.getBlockingThreadNames() = getBlockingThreads().map { it.threadName }
 fun StackTraceElement.isResolvable() = className != null && fileName != null && !isNativeMethod && lineNumber >= 0
 fun StackTraceElement.isPerformingRunReadAction() = methodName.contains("runReadAction", ignoreCase = true)

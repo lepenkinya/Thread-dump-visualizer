@@ -18,8 +18,9 @@ import java.io.File
 import java.net.URL
 import java.util.*
 import javax.swing.*
-import javax.swing.table.AbstractTableModel
-import javax.swing.table.DefaultTableCellRenderer
+import javax.swing.tree.DefaultMutableTreeNode
+import javax.swing.tree.DefaultTreeCellRenderer
+import javax.swing.tree.TreePath
 
 class ThreadDumpToolWindow : ToolWindowFactory {
     lateinit var panel: JPanel
@@ -36,7 +37,9 @@ class ThreadDumpToolWindow : ToolWindowFactory {
     }
 
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
-        DnDSupport.createBuilder(dropPanel.components[0] as JComponent)
+        val jTextArea = synchronized(dropPanel.treeLock) { dropPanel.components[0] as JComponent }
+
+        DnDSupport.createBuilder(jTextArea)
                 .setDropHandler(FileDropHandler(panel, dropPanel, splitPane, project))
                 .enableAsNativeTarget()
                 .disableAsSource()
@@ -87,25 +90,64 @@ class FileDropHandler(val panel: JPanel,
     lateinit var dumps: List<ThreadDumpInfo>
 
     fun createSelectPane(): JPanel {
-        val jTextArea = JTextArea("Please select thread dump").apply { isEditable = false }
+        return JPanel(GridBagLayout()).apply {
+            val jTextArea = JTextArea("Please select thread dump").apply { isEditable = false }
 
-        return JPanel(GridBagLayout()).apply { add(jTextArea) }
+            add(jTextArea)
+        }
     }
 
-    fun createTable(): JTable {
-        val jTable = JTable(object : AbstractTableModel() {
-            override fun getColumnName(column: Int) = "Thread dump id"
-            override fun getRowCount() = dumps.size
-            override fun getColumnCount() = 1
-            override fun getValueAt(rowIndex: Int, columnIndex: Int) = "${dumps[rowIndex].objectId}"
-        })
+    fun createTree(): JComponent {
+        val root = DefaultMutableTreeNode("MongoDB")
 
-        jTable.apply {
-            setDefaultRenderer(Any::class.java, ThreadDumpCellRenderer(dumps))
-            addMouseListener(ThreadDumpTableMouseAdapter(splitPane, dumps, project))
+        dumps.forEach { root.add(DefaultMutableTreeNode(it)) }
+
+        val jTree = JTree(root).apply {
+            expandPath(TreePath(model.root))
+
+            cellRenderer = object : DefaultTreeCellRenderer() {
+                override fun getTreeCellRendererComponent(tree: JTree?,
+                                                          value: Any?,
+                                                          selected: Boolean,
+                                                          expanded: Boolean,
+                                                          leaf: Boolean,
+                                                          row: Int,
+                                                          hasFocus: Boolean): Component {
+                    return super.getTreeCellRendererComponent(tree, value, selected, expanded, leaf, row, hasFocus).apply {
+                        val info = (value as? DefaultMutableTreeNode)?.userObject as? ThreadDumpInfo
+                        info?.let {
+                            val stateColor = it.awtThread.getStateColor()
+                            val iconName = "${stateColor.stringName()}-circle-16.png"
+
+                            icon = ImageIcon(javaClass.classLoader.getResource(iconName))
+                        }
+                    }
+                }
+            }
+
+            addMouseListener(object : MouseAdapter() {
+                override fun mouseClicked(e: MouseEvent) {
+                    val node = lastSelectedPathComponent as? DefaultMutableTreeNode ?: return
+                    val dumpInfo = node.userObject as? ThreadDumpInfo ?: return
+
+                    if (e.clickCount != 2) return
+
+                    val fileContent = createFileContent(dumpInfo)
+                    val file = LightVirtualFile("${dumpInfo.objectId}.txt", fileContent.text)
+                    val jTextArea = JTextArea("AWT thread waits: ${dumpInfo.getBlockingThreadNames().joinToString()}")
+
+                    with(FileEditorManager.getInstance(project)) {
+                        openFile(file, true)
+                        addTopComponent(getSelectedEditor(file)!!, jTextArea)
+                    }
+
+                    enrichFile(project, fileContent)
+                    splitPane.topComponent = createDiagramComponent(project, file, dumpInfo, fileContent)
+                }
+            })
         }
 
-        return jTable
+        return JScrollPane(jTree).apply { border = BorderFactory.createEmptyBorder() }
     }
 
 
@@ -141,7 +183,7 @@ class FileDropHandler(val panel: JPanel,
         panel.remove(dropPanel)
 
         splitPane.apply {
-            bottomComponent = createTable()
+            bottomComponent = createTree()
             topComponent = createSelectPane()
             isVisible = true
         }
@@ -170,43 +212,4 @@ class ToolWindowComponentListener(val splitPane: JSplitPane) : ComponentListener
     override fun componentMoved(e: ComponentEvent) = Unit
     override fun componentShown(e: ComponentEvent) = Unit
     override fun componentHidden(e: ComponentEvent) = Unit
-}
-
-class ThreadDumpCellRenderer(val dumps: List<ThreadDumpInfo>) : DefaultTableCellRenderer() {
-    override fun getTableCellRendererComponent(table: JTable,
-                                               value: Any?,
-                                               isSelected: Boolean,
-                                               hasFocus: Boolean,
-                                               row: Int,
-                                               column: Int): Component {
-        return super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column).apply {
-            foreground = dumps[row].awtThread.getStateColor()
-        }
-    }
-}
-
-class ThreadDumpTableMouseAdapter(val splitPane: JSplitPane,
-                                  val dumps: List<ThreadDumpInfo>,
-                                  val project: Project) : MouseAdapter() {
-    fun getSelectedThreadDump(): ThreadDumpInfo {
-        val table = splitPane.bottomComponent as JTable
-        return dumps[table.selectedRow]
-    }
-
-    override fun mousePressed(e: MouseEvent) {
-        if (e.clickCount != 2) return
-
-        val dumpInfo = getSelectedThreadDump()
-        val fileContent = createFileContent(dumpInfo)
-        val file = LightVirtualFile("${dumpInfo.objectId}.txt", fileContent.text)
-        val jTextArea = JTextArea("AWT thread waits: ${dumpInfo.getBlockingThreadNames().joinToString()}")
-
-        with(FileEditorManager.getInstance(project)) {
-            openFile(file, true)
-            addTopComponent(getSelectedEditor(file)!!, jTextArea)
-        }
-
-        enrichFile(project, fileContent)
-        splitPane.topComponent = createDiagramComponent(project, file, dumpInfo, fileContent)
-    }
 }

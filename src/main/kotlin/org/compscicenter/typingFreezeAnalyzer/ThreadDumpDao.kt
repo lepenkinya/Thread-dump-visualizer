@@ -15,9 +15,8 @@ interface ThreadDumpDao {
 }
 
 class ThreadDumpDaoMongo(map: Map<String, Any>) : ThreadDumpDao {
-    constructor(host: String = "127.0.0.1",
-                port: Int = 27017,
-                dbName: String = "test") : this(mapOf("host" to host, "port" to port, "dbName" to dbName))
+    constructor(host: String = "127.0.0.1", port: Int = 27017, dbName: String = "test")
+            : this(mapOf("host" to host, "port" to port, "dbName" to dbName))
     val host: String by map
     val port: Int by map
     val dbName: String by map

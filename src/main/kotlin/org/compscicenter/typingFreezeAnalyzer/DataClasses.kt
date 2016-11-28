@@ -39,4 +39,6 @@ class ThreadDumpInfo() {
     lateinit var product: String
     lateinit var buildNumber: String
     lateinit var threadInfos: List<ThreadInfo>
+
+    override fun toString() = objectId.toString()
 }
