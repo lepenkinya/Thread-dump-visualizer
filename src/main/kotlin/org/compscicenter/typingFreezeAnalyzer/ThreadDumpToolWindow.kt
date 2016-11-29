@@ -4,18 +4,15 @@ import com.fasterxml.jackson.core.type.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.intellij.ide.dnd.DnDDropHandler
 import com.intellij.ide.dnd.DnDEvent
-import com.intellij.ide.dnd.DnDNativeTarget
 import com.intellij.ide.dnd.DnDSupport
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.testFramework.LightVirtualFile
 import java.awt.*
-import java.awt.datatransfer.DataFlavor
 import java.awt.event.*
-import java.io.File
-import java.net.URL
 import java.util.*
 import javax.swing.*
 import javax.swing.tree.DefaultMutableTreeNode
@@ -92,7 +89,9 @@ class FileDropHandler(val panel: JPanel,
 
     fun createSelectPane(): JPanel {
         return JPanel(GridBagLayout()).apply {
-            val jTextArea = JTextArea("Please select thread dump").apply { isEditable = false }
+            val jTextArea = JTextArea("Please select thread dump").apply {
+                isEditable = false
+            }
 
             add(jTextArea)
         }
@@ -103,101 +102,47 @@ class FileDropHandler(val panel: JPanel,
 
         dumps.forEach { root.add(DefaultMutableTreeNode(it)) }
 
-        //todo very long initialization, 
-        //todo general rule of thumb - if method is more than 10 lines of code, probably it's doing too much
         val jTree = JTree(root).apply {
             expandPath(TreePath(model.root))
-
-            cellRenderer = object : DefaultTreeCellRenderer() {
-                override fun getTreeCellRendererComponent(tree: JTree?,
-                                                          value: Any?,
-                                                          selected: Boolean,
-                                                          expanded: Boolean,
-                                                          leaf: Boolean,
-                                                          row: Int,
-                                                          hasFocus: Boolean): Component {
-                    return super.getTreeCellRendererComponent(tree, value, selected, expanded, leaf, row, hasFocus).apply {
-                        val info = (value as? DefaultMutableTreeNode)?.userObject as? ThreadDumpInfo
-                        info?.let {
-                            val stateColor = it.awtThread.getStateColor()
-                            val iconName = "${stateColor.stringName()}-circle-16.png"
-
-                            icon = ImageIcon(javaClass.classLoader.getResource(iconName))
-                        }
-                    }
-                }
-            }
-
-            addMouseListener(object : MouseAdapter() {
-                override fun mouseClicked(e: MouseEvent) {
-                    val node = lastSelectedPathComponent as? DefaultMutableTreeNode ?: return
-                    val dumpInfo = node.userObject as? ThreadDumpInfo ?: return
-
-                    if (e.clickCount != 2) return
-
-                    val fileContent = createFileContent(dumpInfo)
-                    val file = LightVirtualFile("${dumpInfo.objectId}.txt", fileContent.text)
-                    val jTextArea = JTextArea("AWT thread waits: ${dumpInfo.getBlockingThreadNames().joinToString()}")
-
-                    with(FileEditorManager.getInstance(project)) {
-                        openFile(file, true)
-                        addTopComponent(getSelectedEditor(file)!!, jTextArea)
-                    }
-
-                    enrichFile(project, fileContent)
-                    splitPane.topComponent = createDiagramComponent(project, file, dumpInfo, fileContent)
-                }
-            })
+            cellRenderer = ThreadDumpTreeCellRenderer
+            addMouseListener(ThreadDumpMouseAdapter(this, splitPane, project))
         }
-        
-        //todo To me this looks more straightforward
-        //val pane = JScrollPane(jTree)
-        //pane.border = BorderFactory.createEmptyBorder()
-        
-        return JScrollPane(jTree).apply { border = BorderFactory.createEmptyBorder() }
+
+        val jScrollPane = JScrollPane(jTree).apply {
+            border = BorderFactory.createEmptyBorder()
+        }
+
+        return jScrollPane
     }
 
 
-    @Suppress("UNCHECKED_CAST")
     override fun drop(event: DnDEvent) {
-        val transferable = when (event.attachedObject) {
-            is DnDNativeTarget.EventInfo -> (event.attachedObject as DnDNativeTarget.EventInfo).transferable
-            is DnDEvent -> event.attachedObject as DnDEvent
-            else -> null
-        } ?: return
+        try {
+            val file = getTransferable(event)?.getFile(event) ?: throw DnDException("Can't get file")
+            if (file.extension != "dbconf") throw DnDException("Wrong file extension")
 
-        val fileList = event.transferDataFlavors.find { it == DataFlavor.javaFileListFlavor }
-        val files = transferable.getTransferData(fileList) as? List<File> ?: return
-        if (files.isEmpty()) return
-
-
-        val file = files[0]
-        if (file.extension == "dbconf") {
             val prop: Map<String, Any> = Jackson.mapper.readValue(file, object : TypeReference<HashMap<String, Any>>() {})
-            dumps = ThreadDumpDaoMongo(prop).getAllThreadDumps().sortedByDescending {
-                it.awtThread.weight()
+            val mongoConfig = MongoConfig(prop)
+
+            dumps = ThreadDumpDaoMongo(mongoConfig).getAllThreadDumps().sortedByDescending { it.awtThread.weight() }
+
+            panel.remove(dropPanel)
+
+            splitPane.apply {
+                bottomComponent = createTree()
+                topComponent = createSelectPane()
+                isVisible = true
             }
-        }
+        } catch (e: Exception) {
+            val jPanel = JTextPane().apply {
+                text = if (e is DnDException) "${e.message}" else "Something went wrong"
+                isEditable = false
+            }
 
-//        val dataFlavor = event.transferDataFlavors?.find { it == DataFlavor.stringFlavor } ?: return
-//        val path = transferable.getTransferData(dataFlavor) as? String ?: return
-//        val file = File(URL(path).toURI())
-//        if (file.extension != "dbconf") return
-
-
-//        JBPopupFactory.getInstance()
-//                .createComponentPopupBuilder(JPanel(), null)
-//                .setAdText("TEST!!!")
-//                .createPopup()
-//                .showInFocusCenter()
-
-        panel.remove(dropPanel)
-        
-        //todo here I think it's okay
-        splitPane.apply {
-            bottomComponent = createTree()
-            topComponent = createSelectPane()
-            isVisible = true
+            JBPopupFactory.getInstance()
+                    .createComponentPopupBuilder(jPanel, jPanel)
+                    .createPopup()
+                    .showInCenterOf(panel)
         }
     }
 }
@@ -225,3 +170,51 @@ class ToolWindowComponentListener(val splitPane: JSplitPane) : ComponentListener
     override fun componentShown(e: ComponentEvent) = Unit
     override fun componentHidden(e: ComponentEvent) = Unit
 }
+
+object ThreadDumpTreeCellRenderer : DefaultTreeCellRenderer() {
+    override fun getTreeCellRendererComponent(tree: JTree?,
+                                              value: Any?,
+                                              selected: Boolean,
+                                              expanded: Boolean,
+                                              leaf: Boolean,
+                                              row: Int,
+                                              hasFocus: Boolean): Component {
+        val renderer = super.getTreeCellRendererComponent(tree, value, selected, expanded, leaf, row, hasFocus)
+        val info = (value as? DefaultMutableTreeNode)?.userObject as? ThreadDumpInfo
+
+        if (info != null) {
+            val stateColor = info.awtThread.getStateColor()
+            val iconName = "${stateColor.stringName()}-circle-16.png"
+            val resource = javaClass.classLoader.getResource(iconName)
+
+            if (resource != null) icon = ImageIcon(resource)
+        }
+
+        return renderer
+    }
+}
+
+class ThreadDumpMouseAdapter(private val jTree: JTree,
+                             private val splitPane: JSplitPane,
+                             private val project: Project) : MouseAdapter() {
+    override fun mouseClicked(e: MouseEvent) {
+        val node = jTree.lastSelectedPathComponent as? DefaultMutableTreeNode ?: return
+        val dumpInfo = node.userObject as? ThreadDumpInfo ?: return
+
+        if (e.clickCount != 2) return
+
+        val fileContent = createFileContent(dumpInfo)
+        val file = LightVirtualFile("${dumpInfo.objectId}.txt", fileContent.text)
+        val jTextArea = JTextArea("AWT thread waits: ${dumpInfo.getBlockingThreadNames().joinToString()}")
+
+        with(FileEditorManager.getInstance(project)) {
+            openFile(file, true)
+            addTopComponent(getSelectedEditor(file)!!, jTextArea)
+        }
+
+        enrichFile(project, fileContent)
+        splitPane.topComponent = createDiagramComponent(project, file, dumpInfo, fileContent)
+    }
+}
+
+class DnDException(message: String) : Exception(message)

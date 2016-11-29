@@ -3,6 +3,9 @@ package org.compscicenter.typingFreezeAnalyzer
 import com.intellij.codeEditor.JavaEditorFileSwapper
 import com.intellij.execution.filters.OpenFileHyperlinkInfo
 import com.intellij.execution.impl.EditorHyperlinkSupport
+import com.intellij.ide.dnd.DnDEvent
+import com.intellij.ide.dnd.DnDNativeTarget
+import com.intellij.ide.dnd.TransferableWrapper
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.markup.EffectType
 import com.intellij.openapi.editor.markup.HighlighterLayer
@@ -17,6 +20,9 @@ import com.intellij.ui.JBColor
 import com.intellij.uml.UmlGraphBuilderFactory
 import java.awt.Color
 import java.awt.Font
+import java.awt.datatransfer.DataFlavor
+import java.awt.datatransfer.Transferable
+import java.io.File
 import java.lang.management.ThreadInfo
 import java.util.*
 import javax.swing.JComponent
@@ -236,8 +242,23 @@ fun createDiagramComponent(project: Project,
     return builder.view.jComponent
 }
 
+fun getTransferable(event: DnDEvent): Transferable? {
+    return when (event.attachedObject) {
+        is DnDNativeTarget.EventInfo -> (event.attachedObject as DnDNativeTarget.EventInfo).transferable
+        is TransferableWrapper -> event
+        else -> null
+    }
+}
+
+fun Transferable.getFile(event: DnDEvent): File? {
+    val dataFlavor = event.transferDataFlavors.find { it == DataFlavor.javaFileListFlavor }
+    val files = getTransferData(dataFlavor) as? List<*>
+
+    return files?.firstOrNull() as? File
+}
+
 fun main(args: Array<String>) {
-    ThreadDumpDaoMongo().getAllThreadDumps().forEach {
+    ThreadDumpDaoMongo(MongoConfig(dbName = "test")).getAllThreadDumps().forEach {
         println(createFileContent(it).text)
     }
 }

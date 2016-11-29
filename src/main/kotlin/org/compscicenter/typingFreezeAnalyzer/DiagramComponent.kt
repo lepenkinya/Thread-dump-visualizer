@@ -87,7 +87,8 @@ class ThreadDumpPresentation {
 }
 
 //do not use pair, most of the times it becomes confusing
-class ThreadDumpDependency(val working: ThreadDumpPresentation, val waiting: ThreadDumpPresentation)
+class ThreadDumpDependency(val working: ThreadDumpPresentation,
+                           val waiting: ThreadDumpPresentation)
 
 
 //todo like even here diagram should not know anything about ThreadInfo, 
