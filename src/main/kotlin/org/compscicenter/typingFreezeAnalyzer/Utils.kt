@@ -1,5 +1,6 @@
 package org.compscicenter.typingFreezeAnalyzer
 
+import com.fasterxml.jackson.core.type.TypeReference
 import com.intellij.codeEditor.JavaEditorFileSwapper
 import com.intellij.execution.filters.OpenFileHyperlinkInfo
 import com.intellij.execution.impl.EditorHyperlinkSupport
@@ -18,14 +19,23 @@ import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.ui.JBColor
 import com.intellij.uml.UmlGraphBuilderFactory
+import org.apache.commons.compress.archivers.zip.ZipFile
+import org.apache.commons.io.IOUtils
 import java.awt.Color
+import java.awt.Dimension
 import java.awt.Font
+import java.awt.GridBagLayout
 import java.awt.datatransfer.DataFlavor
 import java.awt.datatransfer.Transferable
 import java.io.File
-import java.lang.management.ThreadInfo
+import java.io.FileInputStream
+import java.io.InputStream
 import java.util.*
 import javax.swing.JComponent
+import javax.swing.JPanel
+import javax.swing.JSplitPane
+import javax.swing.JTextArea
+import javax.swing.tree.DefaultMutableTreeNode
 
 fun getReadableState(state: Thread.State) = when (state) {
     Thread.State.BLOCKED -> "blocked"
@@ -35,7 +45,7 @@ fun getReadableState(state: Thread.State) = when (state) {
     Thread.State.TERMINATED -> "terminated"
 }
 
-fun printStackTrace(info: ThreadInfo,
+fun printStackTrace(info: ThreadInfoDigest,
                     text: StringBuilder,
                     classLinkInfoList: MutableList<ClassLinkInfo>,
                     highlightInfoList: MutableList<HighlightInfo>) {
@@ -47,7 +57,7 @@ fun printStackTrace(info: ThreadInfo,
     }
 }
 
-fun dumpThreadInfo(info: ThreadInfo,
+fun dumpThreadInfo(info: ThreadInfoDigest,
                    text: StringBuilder,
                    classLinkInfoList: MutableList<ClassLinkInfo>,
                    highlightInfoList: MutableList<HighlightInfo>) {
@@ -57,19 +67,19 @@ fun dumpThreadInfo(info: ThreadInfo,
     highlightThreadState(info, text, highlightInfoList)
 
     info.lockName?.let { text.append(" on ${info.lockName}") }
-    info.lockOwnerName?.let { text.append(" owned by \"${info.lockOwnerName}\" Id=${info.lockOwnerId}") }
+    info.lockOwnerName?.let { text.append(" owned by \"${info.lockOwnerName}\" Id=0x0") }
 
     text.appendln()
 
-    if (info.isSuspended) text.appendln(" (suspended)")
-    if (info.isInNative) text.appendln(" (in native)")
+    if (info.suspended) text.appendln(" (suspended)")
+    if (info.inNative) text.appendln(" (in native)")
 
     printStackTrace(info, text, classLinkInfoList, highlightInfoList)
 
     text.appendln()
 }
 
-fun addClassLinkInfo(info: ThreadInfo,
+fun addClassLinkInfo(info: ThreadInfoDigest,
                      element: StackTraceElement,
                      text: StringBuilder,
                      classLinkInfoList: MutableList<ClassLinkInfo>) {
@@ -82,7 +92,7 @@ fun addClassLinkInfo(info: ThreadInfo,
     classLinkInfoList += classLinkInfo
 }
 
-fun highlightRunReadAction(info: ThreadInfo,
+fun highlightRunReadAction(info: ThreadInfoDigest,
                            element: StackTraceElement,
                            text: StringBuilder,
                            highlightInfoList: MutableList<HighlightInfo>) {
@@ -93,7 +103,7 @@ fun highlightRunReadAction(info: ThreadInfo,
     highlightInfoList += HighlightInfo(info, startOffset, endOffset, textAttributes, HighlightType.READ_ACTION)
 }
 
-fun highlightThreadState(info: ThreadInfo,
+fun highlightThreadState(info: ThreadInfoDigest,
                          text: StringBuilder,
                          highlightInfoList: MutableList<HighlightInfo>) {
     val startOffset = text.length - "${info.threadState}".length
@@ -104,27 +114,27 @@ fun highlightThreadState(info: ThreadInfo,
 }
 
 
-fun ThreadInfo.getStateColor(): Color = when (threadState) {
+fun ThreadInfoDigest.getStateColor(): Color = when (threadState) {
     Thread.State.BLOCKED, Thread.State.WAITING, Thread.State.TIMED_WAITING -> Color.RED
-    Thread.State.RUNNABLE -> if (isYielding()) Color.YELLOW else Color.GREEN
+    Thread.State.RUNNABLE -> if (isYielding()) Color.ORANGE else Color.GREEN
     else -> Color.GREEN
 }
 
-fun ThreadInfo.isSignificant(vararg packagesToSkip: String = arrayOf("java", "sun", "com.sun")) = when (stackTrace) {
+fun ThreadInfoDigest.isSignificant(vararg packagesToSkip: String = arrayOf("java", "sun", "com.sun")) = when (stackTrace) {
     null -> false
     else -> stackTrace.asSequence()
             .filter { it.className != null }
             .any { stackTrace -> packagesToSkip.none { stackTrace.className.startsWith(it) } }
 }
 
-fun ThreadInfo.weight() = when (getStateColor()) {
+fun ThreadInfoDigest.weight() = when (getStateColor()) {
     Color.RED -> 3
-    Color.YELLOW -> 2
+    Color.ORANGE -> 2
     Color.GREEN -> 1
     else -> 0
 }
 
-fun ThreadInfo.isPerformingRunReadAction() = when (stackTrace) {
+fun ThreadInfoDigest.isPerformingRunReadAction() = when (stackTrace) {
     null -> false
     else -> stackTrace.asSequence().filter { it.methodName != null }.any { it.isPerformingRunReadAction() }
 }
@@ -132,21 +142,21 @@ fun ThreadInfo.isPerformingRunReadAction() = when (stackTrace) {
 fun Color.stringName() = when (this) {
     Color.RED -> "red"
     Color.GREEN -> "green"
-    Color.YELLOW -> "yellow"
+    Color.ORANGE -> "orange"
     else -> "undefined"
 }
 
-fun ThreadInfo.isYielding() = when {
+fun ThreadInfoDigest.isYielding() = when {
     stackTrace == null || stackTrace.isEmpty() || stackTrace[0].methodName == null -> false
     else -> "yield" in stackTrace[0].methodName
 }
 
-fun ThreadInfo.isRunning() = threadState == Thread.State.RUNNABLE && !isYielding()
+fun ThreadInfoDigest.isRunning() = threadState == Thread.State.RUNNABLE && !isYielding()
 
-fun ThreadInfo.isAWTThread() = threadName.startsWith("AWT-EventQueue")
-fun ThreadDumpInfo.findThreadById(id: Long) = threadInfos.find { it.threadId == id }
+fun ThreadInfoDigest.isAWTThread() = threadName.startsWith("AWT-EventQueue")
+fun ThreadDumpInfo.findThreadByName(threadName: String?) = threadInfos.find { it.threadName == threadName }
 fun ThreadDumpInfo.getBlockingThreads() = threadInfos.filter {
-    it.isPerformingRunReadAction() && (it.isRunning() || it.lockOwnerId != -1L)
+    it.isPerformingRunReadAction() && (it.isRunning() || it.lockOwnerName != null)
 }
 
 fun ThreadDumpInfo.getBlockingThreadNames() = getBlockingThreads().map { it.threadName }
@@ -195,23 +205,24 @@ fun addHighlighters(fileEditor: Editor, highlightInfoList: List<HighlightInfo>) 
     highlightInfoList.forEach { markupModel.addRangeHighlighter(it) }
 }
 
-fun ThreadDumpInfo.getDependencyGraph(): List<Pair<ThreadInfo, ThreadInfo>> {
+fun ThreadDumpInfo.getDependencyGraph(): List<Pair<ThreadInfoDigest, ThreadInfoDigest>> {
     val blockingThreads = getBlockingThreads()
 
-    val dependencyGraph = ArrayList<Pair<ThreadInfo, ThreadInfo>>().apply {
+    val dependencyGraph = ArrayList<Pair<ThreadInfoDigest, ThreadInfoDigest>>().apply {
+        with(awtThread) { if (lockOwnerName != null) add(this to findThreadByName(lockOwnerName)!!) }
         addAll(blockingThreads.map { awtThread to it })
-        addAll(blockingThreads.filter { it.lockOwnerId != -1L }.map { it to findThreadById(it.lockOwnerId)!! })
+        addAll(blockingThreads.filter { it.lockOwnerName != null }.map { it to findThreadByName(it.lockOwnerName)!! })
     }
 
     return dependencyGraph
 }
 
-fun FileContent.getThreadStateOffset(threadId: Long) = highlightInfoList.asSequence()
-        .filter { it.threadInfo.threadId == threadId }
+fun FileContent.getThreadStateOffset(threadName: String) = highlightInfoList.asSequence()
+        .filter { it.threadInfo.threadName == threadName }
         .find { it.highlightType == HighlightType.THREAD_STATE }?.startOffset
 
-fun FileContent.getReadActionOffset(threadId: Long) = highlightInfoList.asSequence()
-        .filter { it.threadInfo.threadId == threadId }
+fun FileContent.getReadActionOffset(threadName: String) = highlightInfoList.asSequence()
+        .filter { it.threadInfo.threadName == threadName }
         .find { it.highlightType == HighlightType.READ_ACTION }?.startOffset
 
 fun createFileContent(dumpInfo: ThreadDumpInfo): FileContent {
@@ -221,7 +232,6 @@ fun createFileContent(dumpInfo: ThreadDumpInfo): FileContent {
 
     dumpInfo.threadInfos
             .asSequence()
-            .filter { it.isSignificant() }
             .forEach { dumpThreadInfo(it, text, linkInfoList, highlightInfoList) }
 
     return FileContent("$text", linkInfoList, highlightInfoList)
@@ -251,14 +261,83 @@ fun getTransferable(event: DnDEvent): Transferable? {
 }
 
 fun Transferable.getFile(event: DnDEvent): File? {
-    val dataFlavor = event.transferDataFlavors.find { it == DataFlavor.javaFileListFlavor }
+    val dataFlavor = event.transferDataFlavors.find { it == DataFlavor.javaFileListFlavor } ?: return null
     val files = getTransferData(dataFlavor) as? List<*>
 
     return files?.firstOrNull() as? File
 }
 
-fun main(args: Array<String>) {
-    ThreadDumpDaoMongo(MongoConfig(dbName = "test")).getAllThreadDumps().forEach {
-        println(createFileContent(it).text)
+fun createSelectPane(): JPanel {
+    return JPanel(GridBagLayout()).apply {
+        val jTextArea = JTextArea("Please select thread dump").apply {
+            isEditable = false
+        }
+
+        add(jTextArea)
+    }
+}
+
+fun createTreeFromMongo(file: File): DefaultMutableTreeNode {
+    val root = DefaultMutableTreeNode("MongoDB")
+    val prop = FileDropHandler.Jackson.mapper.readValue<Map<String, Any>>(file, object : TypeReference<Map<String, Any>>() {})
+    val mongoConfig = MongoConfig(prop)
+    val dumps = ThreadDumpDaoMongo(mongoConfig).getAllThreadDumps().sortedByDescending { it.awtThread.weight() }
+
+    dumps.forEach { root.add(DefaultMutableTreeNode(it)) }
+
+    return root
+}
+
+fun createTreeFromZip(file: File): DefaultMutableTreeNode {
+    val root = DefaultMutableTreeNode(file.name)
+    val dirs = HashMap<String, DefaultMutableTreeNode>()
+
+    ZipFile(file).use { zipFile ->
+        val entries = zipFile.entries.toList().sortedBy { it.name }
+
+        for (entry in entries) {
+            val entryFile = File(entry.name)
+            val parentNode = dirs[entryFile.parent] ?: root
+
+            if (entry.isDirectory) {
+                val newDir = DefaultMutableTreeNode(entryFile.name)
+
+                parentNode.add(newDir)
+                dirs[entryFile.path] = newDir
+            } else {
+                val dump = zipFile.getInputStream(entry).getThreadDump()
+
+                if (dump != null) parentNode.add(DefaultMutableTreeNode(dump))
+            }
+        }
+    }
+
+    return root
+}
+
+fun createTreeFromTxt(file: File): DefaultMutableTreeNode {
+    val dump = FileInputStream(file).getThreadDump() ?: throw DnDException("Can't parse dump from $file")
+    return DefaultMutableTreeNode(dump)
+}
+
+fun InputStream.getThreadDump() = buffered().use {
+    val fileContent = IOUtils.toString(it, "UTF-8")
+    parseThreadDumpInfo(fileContent)
+}
+
+fun JSplitPane.reorganise(w: Int, h: Int) {
+    dividerLocation = h / 2
+
+    val topSize = Dimension(w, dividerLocation)
+    val bottomSize = Dimension(w, h - dividerLocation)
+
+    size = Dimension(w, h)
+    bottomComponent?.apply {
+        minimumSize = bottomSize
+        size = bottomSize
+    }
+    topComponent?.apply {
+        minimumSize = topSize
+        size = topSize
     }
 }

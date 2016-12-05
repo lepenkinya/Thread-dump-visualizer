@@ -1,6 +1,5 @@
 package org.compscicenter.typingFreezeAnalyzer
 
-import com.fasterxml.jackson.core.type.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.intellij.ide.dnd.DnDDropHandler
 import com.intellij.ide.dnd.DnDEvent
@@ -11,8 +10,12 @@ import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.testFramework.LightVirtualFile
-import java.awt.*
+import java.awt.BorderLayout
+import java.awt.Component
+import java.awt.Font
+import java.awt.GridBagLayout
 import java.awt.event.*
+import java.io.File
 import java.util.*
 import javax.swing.*
 import javax.swing.tree.DefaultMutableTreeNode
@@ -34,7 +37,6 @@ class ThreadDumpToolWindow : ToolWindowFactory {
     }
 
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
-        //why it is synchronized?
         val jTextArea = synchronized(dropPanel.treeLock) { dropPanel.components[0] as JComponent }
 
         DnDSupport.createBuilder(jTextArea)
@@ -85,22 +87,13 @@ class FileDropHandler(val panel: JPanel,
         val mapper = ObjectMapper()
     }
 
-    lateinit var dumps: List<ThreadDumpInfo>
-
-    fun createSelectPane(): JPanel {
-        return JPanel(GridBagLayout()).apply {
-            val jTextArea = JTextArea("Please select thread dump").apply {
-                isEditable = false
-            }
-
-            add(jTextArea)
+    fun createTree(file: File): JComponent {
+        val root = when (file.extension) {
+            "dbconf" -> createTreeFromMongo(file)
+            "zip" -> createTreeFromZip(file)
+            "txt" -> createTreeFromTxt(file)
+            else -> throw DnDException("Unknown file extension: ${file.extension}")
         }
-    }
-
-    fun createTree(): JComponent {
-        val root = DefaultMutableTreeNode("MongoDB")
-
-        dumps.forEach { root.add(DefaultMutableTreeNode(it)) }
 
         val jTree = JTree(root).apply {
             expandPath(TreePath(model.root))
@@ -115,27 +108,24 @@ class FileDropHandler(val panel: JPanel,
         return jScrollPane
     }
 
-
     override fun drop(event: DnDEvent) {
         try {
             val file = getTransferable(event)?.getFile(event) ?: throw DnDException("Can't get file")
-            if (file.extension != "dbconf") throw DnDException("Wrong file extension")
-
-            val prop: Map<String, Any> = Jackson.mapper.readValue(file, object : TypeReference<HashMap<String, Any>>() {})
-            val mongoConfig = MongoConfig(prop)
-
-            dumps = ThreadDumpDaoMongo(mongoConfig).getAllThreadDumps().sortedByDescending { it.awtThread.weight() }
-
-            panel.remove(dropPanel)
 
             splitPane.apply {
-                bottomComponent = createTree()
+                bottomComponent = createTree(file)
                 topComponent = createSelectPane()
                 isVisible = true
             }
+
+            panel.remove(dropPanel)
         } catch (e: Exception) {
             val jPanel = JTextPane().apply {
-                text = if (e is DnDException) "${e.message}" else "Something went wrong"
+                text = when (e) {
+                    is NoSuchElementException -> "Bad database configuration"
+                    is DnDException -> "${e.message}"
+                    else -> "Unknown exception: ${e.message}"
+                }
                 isEditable = false
             }
 
@@ -144,23 +134,6 @@ class FileDropHandler(val panel: JPanel,
                     .createPopup()
                     .showInCenterOf(panel)
         }
-    }
-}
-
-fun JSplitPane.reorganise(w: Int, h: Int) {
-    dividerLocation = h / 2
-
-    val topSize = Dimension(w, dividerLocation)
-    val bottomSize = Dimension(w, h - dividerLocation)
-
-    size = Dimension(w, h)
-    bottomComponent?.apply {
-        minimumSize = bottomSize
-        size = bottomSize
-    }
-    topComponent?.apply {
-        minimumSize = topSize
-        size = topSize
     }
 }
 
@@ -183,8 +156,8 @@ object ThreadDumpTreeCellRenderer : DefaultTreeCellRenderer() {
         val info = (value as? DefaultMutableTreeNode)?.userObject as? ThreadDumpInfo
 
         if (info != null) {
-            val stateColor = info.awtThread.getStateColor()
-            val iconName = "${stateColor.stringName()}-circle-16.png"
+            val iconColor = info.awtThread.getStateColor().stringName()
+            val iconName = "$iconColor-circle-16.png"
             val resource = javaClass.classLoader.getResource(iconName)
 
             if (resource != null) icon = ImageIcon(resource)

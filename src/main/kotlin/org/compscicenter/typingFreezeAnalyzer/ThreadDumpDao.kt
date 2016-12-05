@@ -14,7 +14,6 @@ interface ThreadDumpDao {
     fun getThreadDump(objectId: ObjectId): ThreadDumpInfo
 }
 
-//todo pass MongoConfig object here, statical typing is badass!
 class ThreadDumpDaoMongo(mongoConfig: MongoConfig) : ThreadDumpDao {
     val morphia = Morphia()
     val dataStore: Datastore = with(mongoConfig) { morphia.createDatastore(MongoClient(host, port), dbName) }
