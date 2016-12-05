@@ -29,7 +29,6 @@ class FileContent(val text: String,
                   val classLinkInfoList: List<ClassLinkInfo>,
                   val highlightInfoList: List<HighlightInfo>)
 
-
 class MongoConfig(map: Map<String, Any>) {
     constructor(host: String = "127.0.0.1", port: Int = 27017, dbName: String)
             : this(mapOf("host" to host, "port" to port, "dbName" to dbName))

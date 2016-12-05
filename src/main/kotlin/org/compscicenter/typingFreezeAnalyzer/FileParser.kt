@@ -107,7 +107,7 @@ object StackTraceElementMatchAction : RegexLineMatchAction() {
 
         val dotIndex = entryPoint.lastIndexOf('.')
         val className = entryPoint.substring(0, dotIndex)
-        val methodName = entryPoint.substring(dotIndex + 1, entryPoint.lastIndex)
+        val methodName = entryPoint.substring(dotIndex + 1, entryPoint.length)
 
         val (fileName, lineNumber) = if (fileInfo.contains(':')) {
             val delimiter = fileInfo.indexOf(':')
