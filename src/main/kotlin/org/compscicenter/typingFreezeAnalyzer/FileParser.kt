@@ -1,6 +1,5 @@
 package org.compscicenter.typingFreezeAnalyzer
 
-import org.bson.types.ObjectId
 import java.util.*
 import java.util.regex.Matcher
 import java.util.regex.Pattern
@@ -16,13 +15,17 @@ object LineMatchAction {
 
 abstract class RegexLineMatchAction() {
     abstract val pattern: Pattern
-    abstract fun onMatch(matcher: Matcher, threadDumpInfo: ThreadDumpInfo, builder: ThreadInfoDigest.Builder)
+    abstract fun onMatch(matcher: Matcher,
+                         dumpBuilder: ThreadDumpInfo.Builder,
+                         threadBuilder: ThreadInfoDigest.Builder)
 
-    fun tryMatch(s: String, threadDumpInfo: ThreadDumpInfo, threadInfo: ThreadInfoDigest.Builder): Boolean {
+    fun tryMatch(s: String,
+                 dumpBuilder: ThreadDumpInfo.Builder,
+                 threadBuilder: ThreadInfoDigest.Builder): Boolean {
         val matcher = pattern.matcher(s)
 
         if (matcher.find()) {
-            onMatch(matcher, threadDumpInfo, threadInfo)
+            onMatch(matcher, dumpBuilder, threadBuilder)
             return true
         }
 
@@ -34,49 +37,56 @@ object ThreadNameMatchAction : RegexLineMatchAction() {
     override val pattern = "^\"(?<threadName>.*)\"".toPattern()
     val awtPattern = "^AWT-EventQueue.*?(?<version>[\\d.]+)#(?<buildNumber>.*?) (?<product>.*?), eap:(?<eap>.*?).*".toPattern()
 
-    fun checkAWT(threadName: String, threadDumpInfo: ThreadDumpInfo) {
+    fun checkAWT(threadName: String, dumpBuilder: ThreadDumpInfo.Builder) {
         val awtMatcher = awtPattern.matcher(threadName)
 
         if (!awtMatcher.find()) return
 
-        with(threadDumpInfo) {
-            buildNumber = awtMatcher.group("buildNumber")
-            version = awtMatcher.group("version")
-            product = awtMatcher.group("product")
-        }
+        dumpBuilder.buildNumber(awtMatcher.group("buildNumber"))
+                .version(awtMatcher.group("version"))
+                .product(awtMatcher.group("product"))
     }
 
-    override fun onMatch(matcher: Matcher, threadDumpInfo: ThreadDumpInfo, builder: ThreadInfoDigest.Builder) {
+    override fun onMatch(matcher: Matcher,
+                         dumpBuilder: ThreadDumpInfo.Builder,
+                         threadBuilder: ThreadInfoDigest.Builder) {
         val threadName = matcher.group("threadName")
 
-        builder.threadName(threadName)
-        checkAWT(threadName, threadDumpInfo)
+        threadBuilder.threadName(threadName)
+        checkAWT(threadName, dumpBuilder)
     }
 }
 
 object TreadStateMatchAction : RegexLineMatchAction() {
     override val pattern = "^java.lang.Thread.State: (?<threadState>.*)".toPattern()
 
-    override fun onMatch(matcher: Matcher, threadDumpInfo: ThreadDumpInfo, builder: ThreadInfoDigest.Builder) {
-        val state = Thread.State.valueOf(matcher.group("threadState"))
+    override fun onMatch(matcher: Matcher,
+                         dumpBuilder: ThreadDumpInfo.Builder,
+                         threadBuilder: ThreadInfoDigest.Builder) {
+        val threadStateString = matcher.group("threadState")
+        val state = Thread.State.valueOf(threadStateString)
 
-        builder.threadState(state)
+        threadBuilder.threadState(state)
     }
 }
 
 object InNativeMatchAction : RegexLineMatchAction() {
     override val pattern = "(in native)".toPattern()
 
-    override fun onMatch(matcher: Matcher, threadDumpInfo: ThreadDumpInfo, builder: ThreadInfoDigest.Builder) {
-        builder.inNative(true)
+    override fun onMatch(matcher: Matcher,
+                         dumpBuilder: ThreadDumpInfo.Builder,
+                         threadBuilder: ThreadInfoDigest.Builder) {
+        threadBuilder.inNative(true)
     }
 }
 
 object SuspendedMatchAction : RegexLineMatchAction() {
     override val pattern = "(suspended)".toPattern()
 
-    override fun onMatch(matcher: Matcher, threadDumpInfo: ThreadDumpInfo, builder: ThreadInfoDigest.Builder) {
-        builder.suspended(true)
+    override fun onMatch(matcher: Matcher,
+                         dumpBuilder: ThreadDumpInfo.Builder,
+                         threadBuilder: ThreadInfoDigest.Builder) {
+        threadBuilder.suspended(true)
     }
 }
 
@@ -92,16 +102,20 @@ object LockMatchAction : RegexLineMatchAction() {
         builder.lockOwnerName(lockOwnerMatcher.group("ownerThreadName"))
     }
 
-    override fun onMatch(matcher: Matcher, threadDumpInfo: ThreadDumpInfo, builder: ThreadInfoDigest.Builder) {
-        builder.lockName(matcher.group("lockName"))
-        checkLockOwnerName(matcher.group("lockOwnerName"), builder)
+    override fun onMatch(matcher: Matcher,
+                         dumpBuilder: ThreadDumpInfo.Builder,
+                         threadBuilder: ThreadInfoDigest.Builder) {
+        threadBuilder.lockName(matcher.group("lockName"))
+        checkLockOwnerName(matcher.group("lockOwnerName"), threadBuilder)
     }
 }
 
 object StackTraceElementMatchAction : RegexLineMatchAction() {
     override val pattern = "^at (?<entryPoint>.*?)\\((?<fileInfo>.*?)\\)".toPattern()
 
-    override fun onMatch(matcher: Matcher, threadDumpInfo: ThreadDumpInfo, builder: ThreadInfoDigest.Builder) {
+    override fun onMatch(matcher: Matcher,
+                         dumpBuilder: ThreadDumpInfo.Builder,
+                         threadBuilder: ThreadInfoDigest.Builder) {
         val entryPoint = matcher.group("entryPoint")
         val fileInfo = matcher.group("fileInfo")
 
@@ -119,7 +133,7 @@ object StackTraceElementMatchAction : RegexLineMatchAction() {
             else -> fileInfo to -1
         }
 
-        builder.stackTrace(StackTraceElement(className, methodName, fileName, lineNumber))
+        threadBuilder.stackTrace(StackTraceElement(className, methodName, fileName, lineNumber))
     }
 }
 
@@ -141,25 +155,24 @@ fun sliceThreadInfos(s: String): ArrayList<ArrayList<String>> {
                 info.add(it)
             }
 
+    infos.add(info)
+
     return infos
 }
 
-fun parseThreadDumpInfo(s: String): ThreadDumpInfo? {
-    val dumpInfo = ThreadDumpInfo().apply { objectId = ObjectId.get() }
-    val threadListString = sliceThreadInfos(s)
-    val threadList = ArrayList<ThreadInfoDigest>()
+fun String.parseThreadDump(name: String): ThreadDumpInfo {
+    val dumpBuilder = ThreadDumpInfo.Builder().name(name)
+    val threadListString = sliceThreadInfos(this)
 
     threadListString.forEach { threadInfoString ->
-        val builder = ThreadInfoDigest.Builder()
+        val threadBuilder = ThreadInfoDigest.Builder()
 
         threadInfoString.forEach { line ->
-            LineMatchAction.list.find { it.tryMatch(line.trim(), dumpInfo, builder) } ?: throw IllegalStateException("$line not handled")
+            LineMatchAction.list.find { it.tryMatch(line.trim(), dumpBuilder, threadBuilder) } ?: throw IllegalStateException("$line not handled")
         }
 
-        threadList.add(builder.build())
+        dumpBuilder.threadInfo(threadBuilder.build())
     }
 
-    if (threadList.isEmpty()) return null
-
-    return dumpInfo.apply { this.threadInfos = threadList }
+    return dumpBuilder.build()
 }

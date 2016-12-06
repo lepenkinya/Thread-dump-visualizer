@@ -2,7 +2,8 @@ package org.compscicenter.typingFreezeAnalyzer
 
 import com.intellij.openapi.editor.markup.HighlighterTargetArea
 import com.intellij.openapi.editor.markup.TextAttributes
-import org.bson.types.ObjectId
+import org.compscicenter.typingFreezeAnalyzer.utils.createFileContent
+import org.compscicenter.typingFreezeAnalyzer.utils.isAWTThread
 import org.mongodb.morphia.annotations.Entity
 import org.mongodb.morphia.annotations.Id
 import org.mongodb.morphia.annotations.Transient
@@ -38,17 +39,15 @@ class MongoConfig(map: Map<String, Any>) {
     val dbName: String by map
 }
 
-data class ThreadInfoDigest(val threadName: String,
-                            val threadId: Long,
-                            val lockName: String?,
-                            val lockOwnerName: String?,
-                            val inNative: Boolean,
-                            val suspended: Boolean,
-                            val threadState: Thread.State,
-                            val stackTrace: List<StackTraceElement>?) {
+class ThreadInfoDigest(val threadName: String,
+                       val lockName: String?,
+                       val lockOwnerName: String?,
+                       val inNative: Boolean,
+                       val suspended: Boolean,
+                       val threadState: Thread.State,
+                       val stackTrace: List<StackTraceElement>?) {
     private constructor(builder: Builder) :
             this(builder.threadName,
-                 builder.threadId,
                  builder.lockName,
                  builder.lockOwnerName,
                  builder.inNative,
@@ -58,8 +57,6 @@ data class ThreadInfoDigest(val threadName: String,
 
     class Builder {
         lateinit var threadName: String
-            private set
-        var threadId: Long = 0L
             private set
         var lockName: String? = null
             private set
@@ -86,18 +83,50 @@ data class ThreadInfoDigest(val threadName: String,
     }
 }
 
-@Entity("ThreadDumps")
-class ThreadDumpInfo() {
-    @delegate:Transient val awtThread: ThreadInfoDigest by lazy {
+class ThreadDumpInfo(val name: String,
+                     val version: String?,
+                     val product: String?,
+                     val buildNumber: String?,
+                     val threadInfos: List<ThreadInfoDigest>) {
+    private constructor(builder: Builder) : this(builder.name,
+                                                 builder.version,
+                                                 builder.product,
+                                                 builder.buildNumber,
+                                                 builder.threadInfos)
+
+    @Entity("ThreadDumps")
+    class Builder {
+        @Id
+        lateinit var name: String
+            private set
+        var version: String? = null
+            private set
+        var product: String? = null
+            private set
+        var buildNumber: String? = null
+            private set
+        var threadInfos = ArrayList<ThreadInfoDigest>()
+            private set
+
+        fun name(name: String) = apply { this.name = name }
+        fun version(version: String) = apply { this.version = version }
+        fun product(product: String) = apply { this.product = product }
+        fun buildNumber(buildNumber: String) = apply { this.buildNumber = buildNumber }
+        fun threadInfo(infoDigest: ThreadInfoDigest) = apply { threadInfos.add(infoDigest) }
+
+        fun build(): ThreadDumpInfo {
+            if (threadInfos.isEmpty()) throw IllegalStateException("Thread info list must not be empty")
+
+            return ThreadDumpInfo(this)
+        }
+    }
+
+    @delegate:Transient
+    val awtThread: ThreadInfoDigest by lazy {
         threadInfos.find { it.isAWTThread() } ?: throw IllegalStateException("AWT thread is missed")
     }
-    @Id lateinit var objectId: ObjectId
-    lateinit var version: String
-    lateinit var product: String
-    lateinit var buildNumber: String
-    lateinit var threadInfos: List<ThreadInfoDigest>
 
-    override fun toString() = objectId.toString()
+    override fun toString() = name
 }
 
 fun main(args: Array<String>) {

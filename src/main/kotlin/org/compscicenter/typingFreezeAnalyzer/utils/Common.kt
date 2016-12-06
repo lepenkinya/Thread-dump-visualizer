@@ -1,6 +1,7 @@
-package org.compscicenter.typingFreezeAnalyzer
+package org.compscicenter.typingFreezeAnalyzer.utils
 
 import com.fasterxml.jackson.core.type.TypeReference
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.intellij.codeEditor.JavaEditorFileSwapper
 import com.intellij.execution.filters.OpenFileHyperlinkInfo
 import com.intellij.execution.impl.EditorHyperlinkSupport
@@ -9,23 +10,20 @@ import com.intellij.ide.dnd.DnDNativeTarget
 import com.intellij.ide.dnd.TransferableWrapper
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.markup.EffectType
-import com.intellij.openapi.editor.markup.HighlighterLayer
-import com.intellij.openapi.editor.markup.MarkupModel
 import com.intellij.openapi.editor.markup.TextAttributes
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.search.GlobalSearchScope
+import com.intellij.testFramework.LightVirtualFile
 import com.intellij.ui.JBColor
 import com.intellij.uml.UmlGraphBuilderFactory
 import org.apache.commons.compress.archivers.zip.ZipFile
 import org.apache.commons.io.IOUtils
-import java.awt.Color
-import java.awt.Dimension
+import org.compscicenter.typingFreezeAnalyzer.*
 import java.awt.Font
 import java.awt.GridBagLayout
-import java.awt.datatransfer.DataFlavor
 import java.awt.datatransfer.Transferable
 import java.io.File
 import java.io.FileInputStream
@@ -33,8 +31,6 @@ import java.io.InputStream
 import java.util.*
 import javax.swing.JComponent
 import javax.swing.JPanel
-import javax.swing.JSplitPane
-import javax.swing.JTextArea
 import javax.swing.tree.DefaultMutableTreeNode
 
 fun getReadableState(state: Thread.State) = when (state) {
@@ -61,7 +57,7 @@ fun dumpThreadInfo(info: ThreadInfoDigest,
                    text: StringBuilder,
                    classLinkInfoList: MutableList<ClassLinkInfo>,
                    highlightInfoList: MutableList<HighlightInfo>) {
-    text.appendln("\"${info.threadName}\" tid=${info.threadId} ${getReadableState(info.threadState)}")
+    text.appendln("\"${info.threadName}\" ${getReadableState(info.threadState)}")
     text.append("    java.lang.Thread.State: ${info.threadState}")
 
     highlightThreadState(info, text, highlightInfoList)
@@ -114,55 +110,6 @@ fun highlightThreadState(info: ThreadInfoDigest,
 }
 
 
-fun ThreadInfoDigest.getStateColor(): Color = when (threadState) {
-    Thread.State.BLOCKED, Thread.State.WAITING, Thread.State.TIMED_WAITING -> Color.RED
-    Thread.State.RUNNABLE -> if (isYielding()) Color.ORANGE else Color.GREEN
-    else -> Color.GREEN
-}
-
-fun ThreadInfoDigest.isSignificant(vararg packagesToSkip: String = arrayOf("java", "sun", "com.sun")) = when (stackTrace) {
-    null -> false
-    else -> stackTrace.asSequence()
-            .filter { it.className != null }
-            .any { stackTrace -> packagesToSkip.none { stackTrace.className.startsWith(it) } }
-}
-
-fun ThreadInfoDigest.weight() = when (getStateColor()) {
-    Color.RED -> 3
-    Color.ORANGE -> 2
-    Color.GREEN -> 1
-    else -> 0
-}
-
-fun ThreadInfoDigest.isPerformingRunReadAction() = when (stackTrace) {
-    null -> false
-    else -> stackTrace.asSequence().filter { it.methodName != null }.any { it.isPerformingRunReadAction() }
-}
-
-fun Color.stringName() = when (this) {
-    Color.RED -> "red"
-    Color.GREEN -> "green"
-    Color.ORANGE -> "orange"
-    else -> "undefined"
-}
-
-fun ThreadInfoDigest.isYielding() = when {
-    stackTrace == null || stackTrace.isEmpty() || stackTrace[0].methodName == null -> false
-    else -> "yield" in stackTrace[0].methodName
-}
-
-fun ThreadInfoDigest.isRunning() = threadState == Thread.State.RUNNABLE && !isYielding()
-
-fun ThreadInfoDigest.isAWTThread() = threadName.startsWith("AWT-EventQueue")
-fun ThreadDumpInfo.findThreadByName(threadName: String?) = threadInfos.find { it.threadName == threadName }
-fun ThreadDumpInfo.getBlockingThreads() = threadInfos.filter {
-    it.isPerformingRunReadAction() && (it.isRunning() || it.lockOwnerName != null)
-}
-
-fun ThreadDumpInfo.getBlockingThreadNames() = getBlockingThreads().map { it.threadName }
-fun StackTraceElement.isResolvable() = className != null && fileName != null && !isNativeMethod && lineNumber >= 0
-fun StackTraceElement.isPerformingRunReadAction() = methodName.contains("runReadAction", ignoreCase = true)
-
 fun findFile(project: Project, filename: String): VirtualFile? {
     val javaPsiFacade = JavaPsiFacade.getInstance(project)
     val psiFile = javaPsiFacade.findClass(filename, GlobalSearchScope.allScope(project))?.containingFile
@@ -193,37 +140,11 @@ fun createHyperLinks(project: Project, fileEditor: Editor, classLinkInfoList: Li
     }
 }
 
-fun MarkupModel.addRangeHighlighter(highlightInfo: HighlightInfo) {
-    with(highlightInfo) {
-        addRangeHighlighter(startOffset, endOffset, HighlighterLayer.SYNTAX, textAttributes, targetArea)
-    }
-}
-
 fun addHighlighters(fileEditor: Editor, highlightInfoList: List<HighlightInfo>) {
     val markupModel = fileEditor.markupModel
 
     highlightInfoList.forEach { markupModel.addRangeHighlighter(it) }
 }
-
-fun ThreadDumpInfo.getDependencyGraph(): List<Pair<ThreadInfoDigest, ThreadInfoDigest>> {
-    val blockingThreads = getBlockingThreads()
-
-    val dependencyGraph = ArrayList<Pair<ThreadInfoDigest, ThreadInfoDigest>>().apply {
-        with(awtThread) { if (lockOwnerName != null) add(this to findThreadByName(lockOwnerName)!!) }
-        addAll(blockingThreads.map { awtThread to it })
-        addAll(blockingThreads.filter { it.lockOwnerName != null }.map { it to findThreadByName(it.lockOwnerName)!! })
-    }
-
-    return dependencyGraph
-}
-
-fun FileContent.getThreadStateOffset(threadName: String) = highlightInfoList.asSequence()
-        .filter { it.threadInfo.threadName == threadName }
-        .find { it.highlightType == HighlightType.THREAD_STATE }?.startOffset
-
-fun FileContent.getReadActionOffset(threadName: String) = highlightInfoList.asSequence()
-        .filter { it.threadInfo.threadName == threadName }
-        .find { it.highlightType == HighlightType.READ_ACTION }?.startOffset
 
 fun createFileContent(dumpInfo: ThreadDumpInfo): FileContent {
     val text = StringBuilder()
@@ -260,30 +181,20 @@ fun getTransferable(event: DnDEvent): Transferable? {
     }
 }
 
-fun Transferable.getFile(event: DnDEvent): File? {
-    val dataFlavor = event.transferDataFlavors.find { it == DataFlavor.javaFileListFlavor } ?: return null
-    val files = getTransferData(dataFlavor) as? List<*>
-
-    return files?.firstOrNull() as? File
-}
-
-fun createSelectPane(): JPanel {
-    return JPanel(GridBagLayout()).apply {
-        val jTextArea = JTextArea("Please select thread dump").apply {
-            isEditable = false
-        }
-
-        add(jTextArea)
-    }
-}
 
 fun createTreeFromMongo(file: File): DefaultMutableTreeNode {
     val root = DefaultMutableTreeNode("MongoDB")
-    val prop = FileDropHandler.Jackson.mapper.readValue<Map<String, Any>>(file, object : TypeReference<Map<String, Any>>() {})
-    val mongoConfig = MongoConfig(prop)
-    val dumps = ThreadDumpDaoMongo(mongoConfig).getAllThreadDumps().sortedByDescending { it.awtThread.weight() }
 
-    dumps.forEach { root.add(DefaultMutableTreeNode(it)) }
+    try {
+        val mapper = ObjectMapper()
+        val prop = mapper.readValue<Map<String, Any>>(file, object : TypeReference<Map<String, Any>>() {})
+        val mongoConfig = MongoConfig(prop)
+        val dumps = ThreadDumpDaoMongo(mongoConfig).getAllThreadDumps().sortedByDescending { it.awtThread.weight() }
+
+        dumps.forEach { root.add(DefaultMutableTreeNode(it)) }
+    } catch (e: Exception) {
+        throw DnDException("Can't load dumps from mongodb: ${e.message}")
+    }
 
     return root
 }
@@ -292,52 +203,71 @@ fun createTreeFromZip(file: File): DefaultMutableTreeNode {
     val root = DefaultMutableTreeNode(file.name)
     val dirs = HashMap<String, DefaultMutableTreeNode>()
 
-    ZipFile(file).use { zipFile ->
-        val entries = zipFile.entries.toList().sortedBy { it.name }
+    try {
+        ZipFile(file).use { zipFile ->
+            val entries = zipFile.entries.toList().sortedBy { it.name }
 
-        for (entry in entries) {
-            val entryFile = File(entry.name)
-            val parentNode = dirs[entryFile.parent] ?: root
+            for (entry in entries) {
+                val entryFile = File(entry.name)
+                val parentNode = dirs[entryFile.parent] ?: root
 
-            if (entry.isDirectory) {
-                val newDir = DefaultMutableTreeNode(entryFile.name)
+                if (entry.isDirectory) {
+                    val newDir = DefaultMutableTreeNode(entryFile.name)
 
-                parentNode.add(newDir)
-                dirs[entryFile.path] = newDir
-            } else {
-                val dump = zipFile.getInputStream(entry).getThreadDump()
+                    parentNode.add(newDir)
+                    dirs[entryFile.path] = newDir
+                } else {
+                    val dump = zipFile.getInputStream(entry).tryParseThreadDump(entryFile.name)
 
-                if (dump != null) parentNode.add(DefaultMutableTreeNode(dump))
+                    if (dump != null) parentNode.add(DefaultMutableTreeNode(dump))
+                }
             }
         }
+    } catch (e: Exception) {
+        throw DnDException("Can't parse zip file: ${e.message}")
     }
 
     return root
 }
 
+fun openThreadDump(project: Project,
+                   dumpInfo: ThreadDumpInfo) {
+    val fileContent = createFileContent(dumpInfo)
+    val file = LightVirtualFile("$dumpInfo.txt", fileContent.text)
+
+    with(FileEditorManager.getInstance(project)) {
+        val diagram = createDiagramComponent(project, file, dumpInfo, fileContent)
+        val diagramPanel = JPanel(GridBagLayout()).apply {
+            add(diagram)
+//            preferredSize = Dimension(Int.MAX_VALUE, 200)
+//            maximumSize = Dimension(Int.MAX_VALUE, 200)
+        }
+
+        openFile(file, false)
+        addTopComponent(getSelectedEditor(file)!!, diagramPanel)
+    }
+
+    enrichFile(project, fileContent)
+}
+
 fun createTreeFromTxt(file: File): DefaultMutableTreeNode {
-    val dump = FileInputStream(file).getThreadDump() ?: throw DnDException("Can't parse dump from $file")
+    val dump = try {
+        FileInputStream(file).parseThreadDump(file.name)
+    } catch (e: Exception) {
+        throw DnDException("Can't parse dump from $file, cause: ${e.message}")
+    }
+
     return DefaultMutableTreeNode(dump)
 }
 
-fun InputStream.getThreadDump() = buffered().use {
+fun InputStream.parseThreadDump(name: String = "") = buffered().use {
     val fileContent = IOUtils.toString(it, "UTF-8")
-    parseThreadDumpInfo(fileContent)
+
+    fileContent.parseThreadDump(name)
 }
 
-fun JSplitPane.reorganise(w: Int, h: Int) {
-    dividerLocation = h / 2
-
-    val topSize = Dimension(w, dividerLocation)
-    val bottomSize = Dimension(w, h - dividerLocation)
-
-    size = Dimension(w, h)
-    bottomComponent?.apply {
-        minimumSize = bottomSize
-        size = bottomSize
-    }
-    topComponent?.apply {
-        minimumSize = topSize
-        size = topSize
-    }
+fun InputStream.tryParseThreadDump(name: String = "") = try {
+    parseThreadDump(name)
+} catch (e: Exception) {
+    null
 }

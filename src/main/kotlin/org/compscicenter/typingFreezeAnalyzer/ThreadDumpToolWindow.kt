@@ -1,22 +1,22 @@
 package org.compscicenter.typingFreezeAnalyzer
 
-import com.fasterxml.jackson.databind.ObjectMapper
 import com.intellij.ide.dnd.DnDDropHandler
 import com.intellij.ide.dnd.DnDEvent
 import com.intellij.ide.dnd.DnDSupport
-import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
-import com.intellij.testFramework.LightVirtualFile
-import java.awt.*
+import org.compscicenter.typingFreezeAnalyzer.utils.*
+import java.awt.BorderLayout
+import java.awt.Component
+import java.awt.Font
+import java.awt.GridBagLayout
 import java.awt.event.KeyAdapter
 import java.awt.event.KeyEvent
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import java.io.File
-import java.util.*
 import javax.swing.*
 import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.DefaultTreeCellRenderer
@@ -30,9 +30,7 @@ class ThreadDumpToolWindow : ToolWindowFactory {
     override fun init(toolWindow: ToolWindow) {
         super.init(toolWindow)
 
-        toolWindow.apply {
-            isAutoHide = false
-        }
+        toolWindow.apply { isAutoHide = false }
     }
 
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
@@ -69,17 +67,15 @@ class ThreadDumpToolWindow : ToolWindowFactory {
 class FileDropHandler(val panel: JPanel,
                       val dropPanel: JPanel,
                       val project: Project) : DnDDropHandler {
-    object Jackson {
-        val mapper = ObjectMapper()
-    }
-
     fun createTree(file: File): JComponent {
-        val root = when (file.extension) {
+        val node = when (file.extension) {
             "dbconf" -> createTreeFromMongo(file)
             "zip" -> createTreeFromZip(file)
             "txt" -> createTreeFromTxt(file)
             else -> throw DnDException("Unknown file extension: ${file.extension}")
         }
+
+        val root = DefaultMutableTreeNode("Dumps").apply { add(node) }
 
         val jTree = JTree(root).apply {
             expandPath(TreePath(model.root))
@@ -98,16 +94,17 @@ class FileDropHandler(val panel: JPanel,
     override fun drop(event: DnDEvent) {
         try {
             val file = getTransferable(event)?.getFile(event) ?: throw DnDException("Can't get file")
+            val tree = createTree(file)
 
             panel.apply {
                 remove(dropPanel)
-                add(createTree(file))
-                isVisible = true
+                add(tree)
+                revalidate()
+                repaint()
             }
         } catch (e: Exception) {
             val jPanel = JTextPane().apply {
                 text = when (e) {
-                    is NoSuchElementException -> "Bad database configuration"
                     is DnDException -> "${e.message}"
                     else -> "Unknown exception: ${e.message}"
                 }
@@ -147,25 +144,6 @@ object ThreadDumpTreeCellRenderer : DefaultTreeCellRenderer() {
     }
 }
 
-fun openThreadDump(project: Project,
-                   dumpInfo: ThreadDumpInfo) {
-    val fileContent = createFileContent(dumpInfo)
-    val file = LightVirtualFile("${dumpInfo.objectId}.txt", fileContent.text)
-
-    with(FileEditorManager.getInstance(project)) {
-        val diagram = createDiagramComponent(project, file, dumpInfo, fileContent).apply {
-            size = Dimension(width, 300)
-            preferredSize = Dimension(width, 300)
-            maximumSize = Dimension(width, 300)
-        }
-
-        openFile(file, false)
-        addTopComponent(getSelectedEditor(file)!!, diagram)
-    }
-
-    enrichFile(project, fileContent)
-}
-
 class ThreadDumpKeyAdapter(private val jTree: JTree,
                            private val project: Project) : KeyAdapter() {
     override fun keyPressed(e: KeyEvent) {
@@ -199,9 +177,7 @@ class ThreadDumpMouseAdapter(private val jTree: JTree,
         val node = jTree.lastSelectedPathComponent as? DefaultMutableTreeNode ?: return
         val dumpInfo = node.userObject as? ThreadDumpInfo ?: return
 
-        if (e.clickCount != 2) return
-
-        openThreadDump(project, dumpInfo)
+        if (e.clickCount == 2) openThreadDump(project, dumpInfo)
     }
 }
 

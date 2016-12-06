@@ -12,6 +12,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.ModificationTracker
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ui.JBColor
+import org.compscicenter.typingFreezeAnalyzer.utils.*
 import java.awt.Color
 import java.awt.Point
 import java.awt.Shape

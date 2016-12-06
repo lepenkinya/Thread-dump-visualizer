@@ -1,0 +1,17 @@
+"AWT-EventQueue-0 2016.3#IU-163.SNAPSHOT IDEA, eap:true, os:Mac OS X 10.11.5, java-version:JetBrains s.r.o 1.8.0_112-release-b441" prio=0 tid=0x0 nid=0x0 waiting on condition
+     java.lang.Thread.State: WAITING
+ on sun.java2d.opengl.OGLRenderQueue$QueueFlusher@575574b5 owned by "Java2D Queue Flusher" Id=16
+    at java.lang.Object.$$YJP$$wait(Native Method)
+    at java.lang.Object.wait(Object.java)
+    at java.lang.Object.wait(Object.java:502)
+    at sun.java2d.opengl.OGLRenderQueue$QueueFlusher.flushNow(OGLRenderQueue.java:176)
+    at sun.java2d.opengl.OGLRenderQueue.flushNow(OGLRenderQueue.java:124)
+
+"Java2D Queue Flusher" prio=0 tid=0x0 nid=0x0 runnable
+     java.lang.Thread.State: RUNNABLE
+ (in native)
+    at sun.java2d.opengl.OGLRenderQueue.$$YJP$$flushBuffer(Native Method)
+    at sun.java2d.opengl.OGLRenderQueue.flushBuffer(OGLRenderQueue.java)
+    at sun.java2d.opengl.OGLRenderQueue.flushBuffer(OGLRenderQueue.java:148)
+    at sun.java2d.opengl.OGLRenderQueue.access$100(OGLRenderQueue.java:41)
+    at sun.java2d.opengl.OGLRenderQueue$QueueFlusher.run(OGLRenderQueue.java:226)

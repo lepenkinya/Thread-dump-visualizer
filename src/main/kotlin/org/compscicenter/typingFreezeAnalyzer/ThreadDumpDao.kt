@@ -32,10 +32,14 @@ class ThreadDumpDaoMongo(mongoConfig: MongoConfig) : ThreadDumpDao {
     }
 
     override fun getAllThreadDumps(): List<ThreadDumpInfo> {
-        return dataStore.createQuery(ThreadDumpInfo::class.java).asList()
+        val builderList = dataStore.createQuery(ThreadDumpInfo.Builder::class.java).asList()
+
+        return builderList.map { it.build() }
     }
 
     override fun getThreadDump(objectId: ObjectId): ThreadDumpInfo {
-        return dataStore.createQuery(ThreadDumpInfo::class.java).field("objectId").equal(objectId).get()
+        val builder = dataStore.createQuery(ThreadDumpInfo.Builder::class.java).field("objectId").equal(objectId).get()
+
+        return builder.build()
     }
 }
