@@ -182,7 +182,7 @@ fun getTransferable(event: DnDEvent): Transferable? {
 }
 
 
-fun createTreeFromMongo(file: File): DefaultMutableTreeNode {
+fun createNodeFromMongo(file: File): DefaultMutableTreeNode {
     val root = DefaultMutableTreeNode("MongoDB")
 
     try {
@@ -199,7 +199,7 @@ fun createTreeFromMongo(file: File): DefaultMutableTreeNode {
     return root
 }
 
-fun createTreeFromZip(file: File): DefaultMutableTreeNode {
+fun createNodeFromZip(file: File): DefaultMutableTreeNode {
     val root = DefaultMutableTreeNode(file.name)
     val dirs = HashMap<String, DefaultMutableTreeNode>()
 
@@ -250,11 +250,11 @@ fun openThreadDump(project: Project,
     enrichFile(project, fileContent)
 }
 
-fun createTreeFromTxt(file: File): DefaultMutableTreeNode {
+fun createNodeFromTxt(file: File): DefaultMutableTreeNode {
     val dump = try {
         FileInputStream(file).parseThreadDump(file.name)
     } catch (e: Exception) {
-        throw DnDException("Can't parse dump from $file, cause: ${e.message}")
+        throw DnDException("Can't parse dump from $file: ${e.message}")
     }
 
     return DefaultMutableTreeNode(dump)

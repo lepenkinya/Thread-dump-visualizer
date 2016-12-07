@@ -168,7 +168,7 @@ fun String.parseThreadDump(name: String): ThreadDumpInfo {
         val threadBuilder = ThreadInfoDigest.Builder()
 
         threadInfoString.forEach { line ->
-            LineMatchAction.list.find { it.tryMatch(line.trim(), dumpBuilder, threadBuilder) } ?: throw IllegalStateException("$line not handled")
+            LineMatchAction.list.find { it.tryMatch(line.trim(), dumpBuilder, threadBuilder) } ?: throw IllegalStateException("line: $line not parsed")
         }
 
         dumpBuilder.threadInfo(threadBuilder.build())
