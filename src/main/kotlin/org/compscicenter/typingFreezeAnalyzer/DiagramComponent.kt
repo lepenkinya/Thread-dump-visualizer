@@ -33,7 +33,7 @@ object ThreadInfoDiagramElementManager : AbstractDiagramElementManager<ThreadInf
     override fun getNodeTooltip(element: ThreadInfoDigest) = null
     override fun findInDataContext(context: DataContext?) = null
     override fun isAcceptableAsNode(element: Any?) = element != null
-    override fun getElementTitle(element: ThreadInfoDigest): String = if (element.isAWTThread()) "AWT" else element.threadName
+    override fun getElementTitle(element: ThreadInfoDigest) = if (element.isAWTThread()) "AWT" else element.threadName.initials()
     override fun getItemName(element: Any?, presentation: DiagramState?) = null
 }
 
@@ -75,20 +75,14 @@ class ThreadInfoDiagramExtras(val project: Project,
 }
 
 
-class ThreadDumpPresentation {
+class ThreadPresentation {
     val threadName = "AWT"
     val onClick = Runnable { println("click") }
-
-
-    /**
-     * Probably this is all you need to pass to DiagramModel
-     * And list of dependencies from ThreadDumpPresentation to ThreadDumpPresentation
-     */
 }
 
 //do not use pair, most of the times it becomes confusing
-class ThreadDumpDependency(val working: ThreadDumpPresentation,
-                           val waiting: ThreadDumpPresentation)
+class ThreadDumpDependency(val working: ThreadPresentation,
+                           val waiting: ThreadPresentation)
 
 
 //todo like even here diagram should not know anything about ThreadInfo, 

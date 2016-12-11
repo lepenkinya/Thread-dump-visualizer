@@ -1,6 +1,5 @@
 package org.compscicenter.typingFreezeAnalyzer
 
-import java.util.*
 import java.util.regex.Matcher
 import java.util.regex.Pattern
 
@@ -123,56 +122,45 @@ object StackTraceElementMatchAction : RegexLineMatchAction() {
         val className = entryPoint.substring(0, dotIndex)
         val methodName = entryPoint.substring(dotIndex + 1, entryPoint.length)
 
-        val (fileName, lineNumber) = if (fileInfo.contains(':')) {
-            val delimiter = fileInfo.indexOf(':')
-
-            with(fileInfo) { substring(0, delimiter) to substring(delimiter + 1, lastIndex).toInt() }
+        val delimiterIdx = fileInfo.indexOf(':')
+        val (fileName, lineNumber) = if (delimiterIdx != -1) {
+            with(fileInfo) { substring(0, delimiterIdx) to substring(delimiterIdx + 1, lastIndex).toInt() }
         } else when (fileInfo) {
             "Native Method" -> null to -2
             "Unknown Source" -> null to -1
             else -> fileInfo to -1
         }
 
-        threadBuilder.stackTrace(StackTraceElement(className, methodName, fileName, lineNumber))
+        val stackTraceElement = StackTraceElement(className, methodName, fileName, lineNumber)
+        threadBuilder.stackTrace(stackTraceElement)
     }
 }
 
-fun sliceThreadInfos(s: String): ArrayList<ArrayList<String>> {
-    val infos = ArrayList<ArrayList<String>>()
-    var info = ArrayList<String>()
-    var i = 0
-
-    s.lineSequence()
-            .filter(String::isNotEmpty)
-            .forEach {
-                if (it.startsWith('"')) i++
-                if (i >= 2) {
-                    infos.add(info)
-                    info = ArrayList()
-                    i = 1
-                }
-
-                info.add(it)
-            }
-
-    infos.add(info)
-
-    return infos
+fun String.fireAction(dumpBuilder: ThreadDumpInfo.Builder,
+                      threadBuilder: ThreadInfoDigest.Builder): RegexLineMatchAction? {
+    return LineMatchAction.list.find { it.tryMatch(trim(), dumpBuilder, threadBuilder) }
 }
 
 fun String.parseThreadDump(name: String): ThreadDumpInfo {
     val dumpBuilder = ThreadDumpInfo.Builder().name(name)
-    val threadListString = sliceThreadInfos(this)
+    var threadBuilder = ThreadInfoDigest.Builder()
+    var threadInfoStarted = false
 
-    threadListString.forEach { threadInfoString ->
-        val threadBuilder = ThreadInfoDigest.Builder()
-
-        threadInfoString.forEach { line ->
-            LineMatchAction.list.find { it.tryMatch(line.trim(), dumpBuilder, threadBuilder) } ?: throw IllegalStateException("line: $line not parsed")
+    lineSequence().filter(String::isNotEmpty).forEach { line ->
+        if (line.startsWith('"')) {
+            if (threadInfoStarted) {
+                dumpBuilder.threadInfo(threadBuilder.build())
+                threadBuilder = ThreadInfoDigest.Builder()
+            } else {
+                threadInfoStarted = true
+            }
         }
 
-        dumpBuilder.threadInfo(threadBuilder.build())
+        line.fireAction(dumpBuilder, threadBuilder) ?: throw IllegalStateException("line: \"$line\" not parsed")
     }
 
-    return dumpBuilder.build()
+    return dumpBuilder.run {
+        if (threadInfoStarted) threadInfo(threadBuilder.build())
+        build()
+    }
 }

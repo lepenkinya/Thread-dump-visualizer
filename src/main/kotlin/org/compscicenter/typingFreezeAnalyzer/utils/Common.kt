@@ -8,10 +8,14 @@ import com.intellij.execution.impl.EditorHyperlinkSupport
 import com.intellij.ide.dnd.DnDEvent
 import com.intellij.ide.dnd.DnDNativeTarget
 import com.intellij.ide.dnd.TransferableWrapper
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.editor.ex.EditorEx
 import com.intellij.openapi.editor.markup.EffectType
 import com.intellij.openapi.editor.markup.TextAttributes
 import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.fileEditor.TextEditor
+import com.intellij.openapi.fileTypes.PlainTextFileType
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.JavaPsiFacade
@@ -22,6 +26,7 @@ import com.intellij.uml.UmlGraphBuilderFactory
 import org.apache.commons.compress.archivers.zip.ZipFile
 import org.apache.commons.io.IOUtils
 import org.compscicenter.typingFreezeAnalyzer.*
+import java.awt.Dimension
 import java.awt.Font
 import java.awt.GridBagLayout
 import java.awt.datatransfer.Transferable
@@ -32,6 +37,7 @@ import java.util.*
 import javax.swing.JComponent
 import javax.swing.JPanel
 import javax.swing.tree.DefaultMutableTreeNode
+import javax.swing.tree.TreeNode
 
 fun getReadableState(state: Thread.State) = when (state) {
     Thread.State.BLOCKED -> "blocked"
@@ -124,24 +130,21 @@ fun enrichFile(project: Project, fileContent: FileContent) {
     addHighlighters(fileEditor, fileContent.highlightInfoList)
 }
 
-fun createHyperLinks(project: Project, fileEditor: Editor, classLinkInfoList: List<ClassLinkInfo>) {
-    val editorHyperlinkSupport = EditorHyperlinkSupport(fileEditor, project)
+fun createHyperLinks(project: Project, editor: Editor, classLinkInfoList: List<ClassLinkInfo>) {
+    val hyperlinkSupport = EditorHyperlinkSupport(editor, project)
 
     for (info in classLinkInfoList) {
-        val containingFile = findFile(project, info.className)
+        val containingFile = findFile(project, info.className) ?: continue
+        val openFileHyperlinkInfo = OpenFileHyperlinkInfo(project, containingFile, info.lineNumber - 1)
 
-        containingFile?.let {
-            val openFileHyperlinkInfo = OpenFileHyperlinkInfo(project, it, info.lineNumber - 1)
-
-            with(info.highlightInfo) {
-                editorHyperlinkSupport.createHyperlink(startOffset, endOffset, textAttributes, openFileHyperlinkInfo)
-            }
+        with(info.highlightInfo) {
+            hyperlinkSupport.createHyperlink(startOffset, endOffset, textAttributes, openFileHyperlinkInfo)
         }
     }
 }
 
-fun addHighlighters(fileEditor: Editor, highlightInfoList: List<HighlightInfo>) {
-    val markupModel = fileEditor.markupModel
+fun addHighlighters(editor: Editor, highlightInfoList: List<HighlightInfo>) {
+    val markupModel = editor.markupModel
 
     highlightInfoList.forEach { markupModel.addRangeHighlighter(it) }
 }
@@ -151,8 +154,7 @@ fun createFileContent(dumpInfo: ThreadDumpInfo): FileContent {
     val linkInfoList = ArrayList<ClassLinkInfo>()
     val highlightInfoList = ArrayList<HighlightInfo>()
 
-    dumpInfo.threadInfos
-            .asSequence()
+    dumpInfo.threadList.asSequence()
             .forEach { dumpThreadInfo(it, text, linkInfoList, highlightInfoList) }
 
     return FileContent("$text", linkInfoList, highlightInfoList)
@@ -199,9 +201,31 @@ fun createNodeFromMongo(file: File): DefaultMutableTreeNode {
     return root
 }
 
+fun findNodeToRemove(node: TreeNode, root: TreeNode): TreeNode {
+    var nodeToRemove = node
+
+    while (with(nodeToRemove) { parent != null && parent != root && parent.childCount == 1 }) {
+        nodeToRemove = nodeToRemove.parent
+    }
+
+    return nodeToRemove
+}
+
+fun getOrCreateParent(file: File,
+                      dirs: MutableMap<String?, DefaultMutableTreeNode>): DefaultMutableTreeNode {
+    val parent = file.parentFile
+
+    return dirs.getOrPut(parent?.path, {
+        val parentNode = DefaultMutableTreeNode(parent.name)
+
+        getOrCreateParent(parent, dirs).add(parentNode)
+        parentNode
+    })
+}
+
 fun createNodeFromZip(file: File): DefaultMutableTreeNode {
     val root = DefaultMutableTreeNode(file.name)
-    val dirs = HashMap<String, DefaultMutableTreeNode>()
+    val dirs = HashMap<String?, DefaultMutableTreeNode>().apply { put(null, root) }
 
     try {
         ZipFile(file).use { zipFile ->
@@ -209,17 +233,13 @@ fun createNodeFromZip(file: File): DefaultMutableTreeNode {
 
             for (entry in entries) {
                 val entryFile = File(entry.name)
-                val parentNode = dirs[entryFile.parent] ?: root
 
-                if (entry.isDirectory) {
-                    val newDir = DefaultMutableTreeNode(entryFile.name)
+                if (!entry.isDirectory) {
+                    val dump = zipFile.getInputStream(entry).tryParseThreadDump(entryFile.name) ?: continue
+                    val parentNode = getOrCreateParent(entryFile, dirs)
+                    val node = DefaultMutableTreeNode(dump)
 
-                    parentNode.add(newDir)
-                    dirs[entryFile.path] = newDir
-                } else {
-                    val dump = zipFile.getInputStream(entry).tryParseThreadDump(entryFile.name)
-
-                    if (dump != null) parentNode.add(DefaultMutableTreeNode(dump))
+                    parentNode.add(node)
                 }
             }
         }
@@ -230,23 +250,29 @@ fun createNodeFromZip(file: File): DefaultMutableTreeNode {
     return root
 }
 
+fun TextEditor.setViewerMode() {
+    val editorEx = (editor as? EditorEx) ?: throw IllegalStateException("Editor is not instance of EditorEx")
+
+    editorEx.isViewer = true
+}
+
 fun openThreadDump(project: Project,
                    dumpInfo: ThreadDumpInfo) {
     val fileContent = createFileContent(dumpInfo)
-    val file = LightVirtualFile("$dumpInfo.txt", fileContent.text)
-
-    with(FileEditorManager.getInstance(project)) {
-        val diagram = createDiagramComponent(project, file, dumpInfo, fileContent)
-        val diagramPanel = JPanel(GridBagLayout()).apply {
-            add(diagram)
-//            preferredSize = Dimension(Int.MAX_VALUE, 200)
-//            maximumSize = Dimension(Int.MAX_VALUE, 200)
+    val virtualFile = LightVirtualFile("$dumpInfo", PlainTextFileType.INSTANCE, fileContent.text)
+    val fileEditorManager = FileEditorManager.getInstance(project)
+    val fileEditor = fileEditorManager.openFile(virtualFile, false).single()
+    val textEditor = (fileEditor as TextEditor).apply { setViewerMode() }
+    val showDiagram = Runnable {
+        val diagram = createDiagramComponent(project, virtualFile, dumpInfo, fileContent).apply {
+            preferredSize = Dimension(600, 250)
+            maximumSize = Dimension(600, 250)
         }
 
-        openFile(file, false)
-        addTopComponent(getSelectedEditor(file)!!, diagramPanel)
+        fileEditorManager.addTopComponent(textEditor, JPanel(GridBagLayout()).apply { add(diagram) })
     }
 
+    ApplicationManager.getApplication().executeOnPooledThread(showDiagram)
     enrichFile(project, fileContent)
 }
 
@@ -254,7 +280,7 @@ fun createNodeFromTxt(file: File): DefaultMutableTreeNode {
     val dump = try {
         FileInputStream(file).parseThreadDump(file.name)
     } catch (e: Exception) {
-        throw DnDException("Can't parse dump from $file: ${e.message}")
+        throw DnDException("Can't parse dump: ${e.message}")
     }
 
     return DefaultMutableTreeNode(dump)

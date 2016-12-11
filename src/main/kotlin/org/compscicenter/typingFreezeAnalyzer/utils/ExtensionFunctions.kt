@@ -44,9 +44,9 @@ fun ThreadInfoDigest.isRunning() = threadState == Thread.State.RUNNABLE && !isYi
 
 fun ThreadInfoDigest.isAWTThread() = threadName.startsWith("AWT-EventQueue")
 
-fun ThreadDumpInfo.findThreadByName(threadName: String?) = threadInfos.find { it.threadName == threadName }
+fun ThreadDumpInfo.findThreadByName(threadName: String?) = threadList.find { it.threadName == threadName }
 
-fun ThreadDumpInfo.getBlockingThreads() = threadInfos.filter {
+fun ThreadDumpInfo.getBlockingThreads() = threadList.filter {
     it.isPerformingRunReadAction() && (it.isRunning() || it.lockOwnerName != null)
 }
 
@@ -65,11 +65,11 @@ fun ThreadDumpInfo.getDependencyGraph(): List<Pair<ThreadInfoDigest, ThreadInfoD
 fun StackTraceElement.isResolvable() = className != null && fileName != null && !isNativeMethod && lineNumber >= 0
 fun StackTraceElement.isPerformingRunReadAction() = methodName.contains("runReadAction", ignoreCase = true)
 
-fun Transferable.getFile(event: DnDEvent): File? {
+fun Transferable.getFiles(event: DnDEvent): List<File>? {
     val dataFlavor = event.transferDataFlavors.find { it == DataFlavor.javaFileListFlavor } ?: return null
-    val files = getTransferData(dataFlavor) as? List<*>
+    val files = getTransferData(dataFlavor) as? List<*> ?: return null
 
-    return files?.firstOrNull() as? File
+    return files.map { it as File }
 }
 
 fun MarkupModel.addRangeHighlighter(highlightInfo: HighlightInfo) {
@@ -91,4 +91,11 @@ fun Color.stringName() = when (this) {
     Color.GREEN -> "green"
     Color.ORANGE -> "orange"
     else -> "undefined"
+}
+
+fun String.initials(): String {
+    return split(Regex("\\s+")).asSequence()
+            .filter(String::isNotEmpty)
+            .map { if (it[0].isLetter()) "${it[0].toUpperCase()}" else it }
+            .joinToString(separator = "")
 }

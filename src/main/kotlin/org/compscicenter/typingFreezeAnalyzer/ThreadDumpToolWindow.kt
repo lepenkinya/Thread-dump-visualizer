@@ -12,14 +12,12 @@ import java.awt.BorderLayout
 import java.awt.Component
 import java.awt.event.KeyAdapter
 import java.awt.event.KeyEvent
+import java.awt.event.KeyEvent.*
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import java.io.File
 import javax.swing.*
-import javax.swing.tree.DefaultMutableTreeNode
-import javax.swing.tree.DefaultTreeCellRenderer
-import javax.swing.tree.DefaultTreeModel
-import javax.swing.tree.TreePath
+import javax.swing.tree.*
 
 class ThreadDumpToolWindow : ToolWindowFactory {
     lateinit var panel: JPanel
@@ -73,12 +71,11 @@ class FileDropHandler(val panel: JPanel,
 
     override fun drop(event: DnDEvent) {
         try {
-            val file = getTransferable(event)?.getFile(event) ?: throw DnDException("Can't get file")
+            val files = getTransferable(event)?.getFiles(event) ?: throw DnDException("Can't get files")
             val model = tree.model as DefaultTreeModel
             val root = model.root as DefaultMutableTreeNode
-            val node = createNode(file)
 
-            root.add(node)
+            files.forEach { root.add(createNode(it)) }
             model.reload()
         } catch (e: Exception) {
             val jPanel = JTextPane().apply {
@@ -125,25 +122,24 @@ object ThreadDumpTreeCellRenderer : DefaultTreeCellRenderer() {
 class ThreadDumpKeyAdapter(private val jTree: JTree,
                            private val project: Project) : KeyAdapter() {
     override fun keyPressed(e: KeyEvent) {
-        val node = jTree.lastSelectedPathComponent as? DefaultMutableTreeNode ?: return
-        val root = jTree.model.root
-
-        if (node == root) return
+        val selectionPaths = jTree.selectionPaths ?: return
 
         when (e.keyCode) {
-            KeyEvent.VK_BACK_SPACE, KeyEvent.VK_DELETE -> {
-                var nodeToRemove = node
+            VK_BACK_SPACE, VK_DELETE -> {
+                val root = jTree.model.root as TreeNode
+                val model = jTree.model as DefaultTreeModel
 
-                while (nodeToRemove.parent.childCount == 1 && nodeToRemove.parent != root) {
-                    nodeToRemove = nodeToRemove.parent as DefaultMutableTreeNode
-                }
-
-                (jTree.model as DefaultTreeModel).removeNodeFromParent(nodeToRemove)
+                selectionPaths.asSequence()
+                        .map { it.lastPathComponent as TreeNode }
+                        .map { findNodeToRemove(it, root) }
+                        .filter { it.parent != null }
+                        .forEach { model.removeNodeFromParent(it as MutableTreeNode) }
             }
-            KeyEvent.VK_ENTER -> {
-                val dumpInfo = node.userObject as? ThreadDumpInfo
-
-                if (dumpInfo != null) openThreadDump(project, dumpInfo)
+            VK_ENTER -> {
+                selectionPaths.asSequence()
+                        .map { it.lastPathComponent as DefaultMutableTreeNode }
+                        .mapNotNull { it.userObject as? ThreadDumpInfo }
+                        .forEach { openThreadDump(project, it) }
             }
         }
     }

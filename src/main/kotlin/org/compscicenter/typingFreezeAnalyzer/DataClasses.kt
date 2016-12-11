@@ -87,7 +87,7 @@ class ThreadDumpInfo(val name: String,
                      val version: String?,
                      val product: String?,
                      val buildNumber: String?,
-                     val threadInfos: List<ThreadInfoDigest>) {
+                     val threadList: List<ThreadInfoDigest>) {
     private constructor(builder: Builder) : this(builder.name,
                                                  builder.version,
                                                  builder.product,
@@ -123,7 +123,7 @@ class ThreadDumpInfo(val name: String,
 
     @delegate:Transient
     val awtThread: ThreadInfoDigest by lazy {
-        threadInfos.find { it.isAWTThread() } ?: throw IllegalStateException("AWT thread is missed")
+        threadList.find { it.isAWTThread() } ?: throw IllegalStateException("AWT thread is missed")
     }
 
     override fun toString() = name

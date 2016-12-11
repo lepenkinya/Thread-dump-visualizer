@@ -18,7 +18,7 @@ class FileParserTest {
     fun `Parse good file`() {
         val inputStream = classLoader.getResourceAsStream("good-dump.txt")
         val dump = inputStream.parseThreadDump()
-        val threadInfos = dump.threadInfos
+        val threadInfos = dump.threadList
 
         assertEquals(threadInfos.size, 2)
 
