@@ -90,22 +90,16 @@ object SuspendedMatchAction : RegexLineMatchAction() {
 }
 
 object LockMatchAction : RegexLineMatchAction() {
-    override val pattern = "^on (?<lockName>.*?)@(?<hashCode>[0-9a-fA-F]+)(?<lockOwnerName>.*)".toPattern()
-    val lockOwnerNamePattern = "^ owned by \"(?<ownerThreadName>.*?)\"".toPattern()
-
-    fun checkLockOwnerName(str: String, builder: ThreadInfoDigest.Builder) {
-        val lockOwnerMatcher = lockOwnerNamePattern.matcher(str)
-
-        if (!lockOwnerMatcher.find()) return
-
-        builder.lockOwnerName(lockOwnerMatcher.group("ownerThreadName"))
-    }
+    override val pattern = "^on (?<lockName>[\\p{L}0-9\\.\\_\\$]+)(@(?<hashCode>[0-9a-fA-F]+))?( owned by \"(?<ownerThreadName>.*?)\".*)?".toPattern()
 
     override fun onMatch(matcher: Matcher,
                          dumpBuilder: ThreadDumpInfo.Builder,
                          threadBuilder: ThreadInfoDigest.Builder) {
-        threadBuilder.lockName(matcher.group("lockName"))
-        checkLockOwnerName(matcher.group("lockOwnerName"), threadBuilder)
+        val lockName = matcher.group("lockName")
+        val ownerThreadName = matcher.group("ownerThreadName")
+
+        threadBuilder.lockName(lockName)
+        if (ownerThreadName != null) threadBuilder.lockOwnerName(ownerThreadName)
     }
 }
 
@@ -124,7 +118,7 @@ object StackTraceElementMatchAction : RegexLineMatchAction() {
 
         val delimiterIdx = fileInfo.indexOf(':')
         val (fileName, lineNumber) = if (delimiterIdx != -1) {
-            with(fileInfo) { substring(0, delimiterIdx) to substring(delimiterIdx + 1, lastIndex).toInt() }
+            with(fileInfo) { substring(0, delimiterIdx) to substring(delimiterIdx + 1, length).toInt() }
         } else when (fileInfo) {
             "Native Method" -> null to -2
             "Unknown Source" -> null to -1
@@ -137,8 +131,9 @@ object StackTraceElementMatchAction : RegexLineMatchAction() {
 }
 
 fun String.fireAction(dumpBuilder: ThreadDumpInfo.Builder,
-                      threadBuilder: ThreadInfoDigest.Builder): RegexLineMatchAction? {
-    return LineMatchAction.list.find { it.tryMatch(trim(), dumpBuilder, threadBuilder) }
+                      threadBuilder: ThreadInfoDigest.Builder): Boolean {
+    val trimmed = trim()
+    return LineMatchAction.list.any { it.tryMatch(trimmed, dumpBuilder, threadBuilder) }
 }
 
 fun String.parseThreadDump(name: String): ThreadDumpInfo {
@@ -156,7 +151,7 @@ fun String.parseThreadDump(name: String): ThreadDumpInfo {
             }
         }
 
-        line.fireAction(dumpBuilder, threadBuilder) ?: throw IllegalStateException("line: \"$line\" not parsed")
+        if (!line.fireAction(dumpBuilder, threadBuilder)) throw IllegalStateException("line: \"$line\" not parsed")
     }
 
     return dumpBuilder.run {

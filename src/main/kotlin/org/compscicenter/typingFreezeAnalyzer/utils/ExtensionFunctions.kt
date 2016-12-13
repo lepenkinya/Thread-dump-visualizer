@@ -16,13 +16,6 @@ fun ThreadInfoDigest.getStateColor(): Color = when (threadState) {
     else -> Color.GREEN
 }
 
-fun ThreadInfoDigest.isSignificant(vararg packagesToSkip: String = arrayOf("java", "sun", "com.sun")) = when (stackTrace) {
-    null -> false
-    else -> stackTrace.asSequence()
-            .filter { it.className != null }
-            .any { stackTrace -> packagesToSkip.none { stackTrace.className.startsWith(it) } }
-}
-
 fun ThreadInfoDigest.weight() = when (getStateColor()) {
     Color.RED -> 3
     Color.ORANGE -> 2
@@ -42,21 +35,51 @@ fun ThreadInfoDigest.isYielding() = when {
 
 fun ThreadInfoDigest.isRunning() = threadState == Thread.State.RUNNABLE && !isYielding()
 
-fun ThreadInfoDigest.isAWTThread() = threadName.startsWith("AWT-EventQueue")
+fun String.isAWTThreadName() = startsWith("AWT-EventQueue")
+
+fun ThreadInfoDigest.isAWTThread() = threadName.isAWTThreadName()
 
 fun ThreadDumpInfo.findThreadByName(threadName: String?) = threadList.find { it.threadName == threadName }
 
-fun ThreadDumpInfo.getBlockingThreads() = threadList.filter {
-    it.isPerformingRunReadAction() && (it.isRunning() || it.lockOwnerName != null)
+fun ThreadDumpInfo.getAWTBlockingThreads(): List<ThreadInfoDigest> {
+    val blockingThreads = ArrayList<ThreadInfoDigest>()
+
+    threadList.asSequence()
+            .filter { it !== awtThread }
+            .filter { it.isPerformingRunReadAction() && (it.isRunning() || it.lockOwnerName != null) }
+            .forEach { blockingThreads.add(it) }
+
+    awtThread.lockOwnerName?.let { blockingThreads.add(findThreadByName(it)!!) }
+
+    return blockingThreads
 }
 
-fun ThreadDumpInfo.getDependencyGraph(): List<Pair<ThreadInfoDigest, ThreadInfoDigest>> {
-    val blockingThreads = getBlockingThreads()
+fun ThreadDumpInfo.getDependencyChain(thread: ThreadInfoDigest): List<ThreadDumpDependency> {
+    val res = ArrayList<ThreadDumpDependency>()
+    var waiting = thread
 
-    val dependencyGraph = ArrayList<Pair<ThreadInfoDigest, ThreadInfoDigest>>().apply {
-        with(awtThread) { if (lockOwnerName != null) add(this to findThreadByName(lockOwnerName)!!) }
-        addAll(blockingThreads.map { awtThread to it })
-        addAll(blockingThreads.filter { it.lockOwnerName != null }.map { it to findThreadByName(it.lockOwnerName)!! })
+    while (true) {
+        val working = waiting.lockOwnerName?.let { findThreadByName(it) } ?: break
+
+        res.add(ThreadDumpDependency(ThreadPresentation(waiting), ThreadPresentation(working)))
+        waiting = working
+    }
+
+    return res
+}
+
+fun ThreadDumpInfo.getDependencyGraph(): List<ThreadDumpDependency> {
+    val dependencyGraph = ArrayList<ThreadDumpDependency>().apply {
+        val awtBlockingThreads = getAWTBlockingThreads()
+
+        addAll(awtBlockingThreads.map {
+            val waiting = ThreadPresentation(awtThread)
+            val working = ThreadPresentation(it)
+
+            ThreadDumpDependency(waiting, working)
+        })
+
+        addAll(awtBlockingThreads.flatMap { getDependencyChain(it) })
     }
 
     return dependencyGraph

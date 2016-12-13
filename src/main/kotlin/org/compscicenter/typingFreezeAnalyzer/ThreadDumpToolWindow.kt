@@ -111,8 +111,6 @@ object ThreadDumpTreeCellRenderer : DefaultTreeCellRenderer() {
             val resource = javaClass.classLoader.getResource(iconName)
 
             if (resource != null) icon = ImageIcon(resource)
-        } else {
-            icon = getOpenIcon()
         }
 
         return renderer

@@ -64,20 +64,18 @@ fun dumpThreadInfo(info: ThreadInfoDigest,
                    classLinkInfoList: MutableList<ClassLinkInfo>,
                    highlightInfoList: MutableList<HighlightInfo>) {
     text.appendln("\"${info.threadName}\" ${getReadableState(info.threadState)}")
-    text.append("    java.lang.Thread.State: ${info.threadState}")
+    text.appendln("    java.lang.Thread.State: ${info.threadState}")
 
     highlightThreadState(info, text, highlightInfoList)
 
     info.lockName?.let { text.append(" on ${info.lockName}") }
     info.lockOwnerName?.let { text.append(" owned by \"${info.lockOwnerName}\" Id=0x0") }
 
+    if (info.suspended) text.append(" (suspended)")
+    if (info.inNative) text.append(" (in native)")
+
     text.appendln()
-
-    if (info.suspended) text.appendln(" (suspended)")
-    if (info.inNative) text.appendln(" (in native)")
-
     printStackTrace(info, text, classLinkInfoList, highlightInfoList)
-
     text.appendln()
 }
 
@@ -108,8 +106,8 @@ fun highlightRunReadAction(info: ThreadInfoDigest,
 fun highlightThreadState(info: ThreadInfoDigest,
                          text: StringBuilder,
                          highlightInfoList: MutableList<HighlightInfo>) {
-    val startOffset = text.length - "${info.threadState}".length
-    val endOffset = text.length
+    val startOffset = text.length - "${info.threadState}".length - 1
+    val endOffset = text.length - 1
     val textAttributes = TextAttributes(info.getStateColor(), null, null, null, Font.BOLD)
 
     highlightInfoList += HighlightInfo(info, startOffset, endOffset, textAttributes, HighlightType.THREAD_STATE)
@@ -263,17 +261,23 @@ fun openThreadDump(project: Project,
     val fileEditorManager = FileEditorManager.getInstance(project)
     val fileEditor = fileEditorManager.openFile(virtualFile, false).single()
     val textEditor = (fileEditor as TextEditor).apply { setViewerMode() }
-    val showDiagram = Runnable {
+    val size = Dimension(600, 260)
+    val jpanel = JPanel(GridBagLayout()).apply {
+        preferredSize = size
+        maximumSize = size
+    }
+    val addContent = Runnable {
         val diagram = createDiagramComponent(project, virtualFile, dumpInfo, fileContent).apply {
-            preferredSize = Dimension(600, 250)
-            maximumSize = Dimension(600, 250)
+            preferredSize = size
+            maximumSize = size
         }
 
-        fileEditorManager.addTopComponent(textEditor, JPanel(GridBagLayout()).apply { add(diagram) })
+        jpanel.add(diagram)
+        enrichFile(project, fileContent)
     }
 
-    ApplicationManager.getApplication().executeOnPooledThread(showDiagram)
-    enrichFile(project, fileContent)
+    fileEditorManager.addTopComponent(textEditor, jpanel)
+    ApplicationManager.getApplication().invokeLater(addContent)
 }
 
 fun createNodeFromTxt(file: File): DefaultMutableTreeNode {

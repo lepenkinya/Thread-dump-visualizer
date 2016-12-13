@@ -1,4 +1,3 @@
-import org.compscicenter.typingFreezeAnalyzer.utils.findThreadByName
 import org.compscicenter.typingFreezeAnalyzer.utils.getDependencyGraph
 import org.compscicenter.typingFreezeAnalyzer.utils.parseThreadDump
 import org.junit.Test
@@ -18,7 +17,7 @@ class ThreadDependencyTest {
 
         val (waiting, working) = dependencies[0]
 
-        assertEquals(waiting, dump.awtThread)
-        assertEquals(working, dump.findThreadByName("Java2D Queue Flusher"))
+        assertEquals(waiting.name, dump.awtThread.threadName)
+        assertEquals(working.name, "Java2D Queue Flusher")
     }
 }
