@@ -10,11 +10,9 @@ import com.intellij.ide.dnd.DnDNativeTarget
 import com.intellij.ide.dnd.TransferableWrapper
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.editor.Editor
-import com.intellij.openapi.editor.ex.EditorEx
 import com.intellij.openapi.editor.markup.EffectType
 import com.intellij.openapi.editor.markup.TextAttributes
 import com.intellij.openapi.fileEditor.FileEditorManager
-import com.intellij.openapi.fileEditor.TextEditor
 import com.intellij.openapi.fileTypes.PlainTextFileType
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
@@ -121,11 +119,9 @@ fun findFile(project: Project, filename: String): VirtualFile? {
     return psiFile?.run { JavaEditorFileSwapper.findSourceFile(project, virtualFile) ?: virtualFile }
 }
 
-fun enrichFile(project: Project, fileContent: FileContent) {
-    val fileEditor = FileEditorManager.getInstance(project).selectedTextEditor!!
-
-    createHyperLinks(project, fileEditor, fileContent.classLinkInfoList)
-    addHighlighters(fileEditor, fileContent.highlightInfoList)
+fun enrichFile(project: Project, editor: Editor, fileContent: FileContent) {
+    createHyperLinks(project, editor, fileContent.classLinkInfoList)
+    addHighlighters(editor, fileContent.highlightInfoList)
 }
 
 fun createHyperLinks(project: Project, editor: Editor, classLinkInfoList: List<ClassLinkInfo>) {
@@ -248,35 +244,21 @@ fun createNodeFromZip(file: File): DefaultMutableTreeNode {
     return root
 }
 
-fun TextEditor.setViewerMode() {
-    val editorEx = (editor as? EditorEx) ?: throw IllegalStateException("Editor is not instance of EditorEx")
-
-    editorEx.isViewer = true
-}
-
-fun openThreadDump(project: Project,
-                   dumpInfo: ThreadDumpInfo) {
+fun openThreadDump(project: Project, dumpInfo: ThreadDumpInfo) {
     val fileContent = createFileContent(dumpInfo)
-    val virtualFile = LightVirtualFile("$dumpInfo", PlainTextFileType.INSTANCE, fileContent.text)
     val fileEditorManager = FileEditorManager.getInstance(project)
-    val fileEditor = fileEditorManager.openFile(virtualFile, false).single()
-    val textEditor = (fileEditor as TextEditor).apply { setViewerMode() }
-    val size = Dimension(600, 260)
-    val jpanel = JPanel(GridBagLayout()).apply {
-        preferredSize = size
-        maximumSize = size
-    }
+    val file = LightVirtualFile("$dumpInfo", PlainTextFileType.INSTANCE, fileContent.text)
+    val textEditor = fileEditorManager.openReadOnly(file, false)
+    val size = Dimension(600, 300)
+    val jPanel = JPanel(GridBagLayout()).apply { preferredSize = size }
     val addContent = Runnable {
-        val diagram = createDiagramComponent(project, virtualFile, dumpInfo, fileContent).apply {
-            preferredSize = size
-            maximumSize = size
-        }
+        val diagram = createDiagramComponent(project, file, dumpInfo, fileContent).apply { preferredSize = size }
 
-        jpanel.add(diagram)
-        enrichFile(project, fileContent)
+        jPanel.add(diagram)
+        enrichFile(project, textEditor.editor, fileContent)
     }
 
-    fileEditorManager.addTopComponent(textEditor, jpanel)
+    fileEditorManager.addTopComponent(textEditor, jPanel)
     ApplicationManager.getApplication().invokeLater(addContent)
 }
 

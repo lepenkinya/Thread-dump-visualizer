@@ -5,7 +5,7 @@ task wrapper(type: Wrapper) {
     gradleVersion = '3.2.1'
 }
 buildscript {
-    ext.kotlin_version = '1.0.5-2'
+    ext.kotlin_version = '1.0.5-3'
 
     repositories {
         mavenCentral()

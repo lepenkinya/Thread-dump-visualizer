@@ -1,8 +1,12 @@
 package org.compscicenter.typingFreezeAnalyzer.utils
 
 import com.intellij.ide.dnd.DnDEvent
+import com.intellij.openapi.editor.ex.EditorEx
 import com.intellij.openapi.editor.markup.HighlighterLayer
 import com.intellij.openapi.editor.markup.MarkupModel
+import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.fileEditor.TextEditor
+import com.intellij.openapi.vfs.VirtualFile
 import org.compscicenter.typingFreezeAnalyzer.*
 import java.awt.Color
 import java.awt.datatransfer.DataFlavor
@@ -61,7 +65,7 @@ fun ThreadDumpInfo.getDependencyChain(thread: ThreadInfoDigest): List<ThreadDump
     while (true) {
         val working = waiting.lockOwnerName?.let { findThreadByName(it) } ?: break
 
-        res.add(ThreadDumpDependency(ThreadPresentation(waiting), ThreadPresentation(working)))
+        res.add(ThreadDumpDependency(waiting, working))
         waiting = working
     }
 
@@ -99,6 +103,18 @@ fun MarkupModel.addRangeHighlighter(highlightInfo: HighlightInfo) {
     with(highlightInfo) {
         addRangeHighlighter(startOffset, endOffset, HighlighterLayer.SYNTAX, textAttributes, targetArea)
     }
+}
+
+fun TextEditor.setViewerMode() {
+    val editorEx = (editor as? EditorEx) ?: throw IllegalStateException("Editor is not instance of EditorEx")
+
+    editorEx.isViewer = true
+}
+
+fun FileEditorManager.openReadOnly(file: VirtualFile, focusEditor: Boolean): TextEditor {
+    val textEditor = openFile(file, focusEditor).single() as TextEditor
+
+    return textEditor.apply { setViewerMode() }
 }
 
 fun FileContent.getThreadStateOffset(threadName: String) = highlightInfoList.asSequence()

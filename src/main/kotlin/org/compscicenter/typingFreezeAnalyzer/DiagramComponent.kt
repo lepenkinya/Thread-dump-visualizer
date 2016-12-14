@@ -6,7 +6,6 @@ import com.intellij.diagram.extras.DiagramExtras
 import com.intellij.diagram.extras.EditNodeHandler
 import com.intellij.diagram.presentation.DiagramState
 import com.intellij.openapi.actionSystem.DataContext
-import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.ModificationTracker
@@ -56,12 +55,9 @@ class ThreadInfoDiagramExtras(val project: Project,
         return EditNodeHandler { diagramNode, diagramPresentationModel ->
             val threadName = diagramNode.identifyingElement.name
             val offset = fileContent.run { getReadActionOffset(threadName) ?: getThreadStateOffset(threadName) ?: 0 }
-            val editorIsOpen = FileEditorManager.getInstance(project).getSelectedEditor(file) != null
-
 //            PropertiesComponent.getInstance().setValue("dump.viewer.last.path", "")
 
             OpenFileDescriptor(project, file, offset).navigate(true)
-            if (!editorIsOpen) enrichFile(project, fileContent)
         }
     }
 
@@ -83,7 +79,9 @@ data class ThreadPresentation(val name: String,
 }
 
 data class ThreadDumpDependency(val waiting: ThreadPresentation,
-                                val working: ThreadPresentation)
+                                val working: ThreadPresentation) {
+    constructor(waiting: ThreadInfoDigest, working: ThreadInfoDigest) : this(ThreadPresentation(waiting), ThreadPresentation(working))
+}
 
 class ThreadInfoNode(val threadInfo: ThreadPresentation,
                      provider: DiagramProvider<ThreadPresentation>) : DiagramNodeBase<ThreadPresentation>(provider) {

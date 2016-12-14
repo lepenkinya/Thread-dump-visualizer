@@ -3,6 +3,7 @@ package org.compscicenter.typingFreezeAnalyzer
 import com.intellij.ide.dnd.DnDDropHandler
 import com.intellij.ide.dnd.DnDEvent
 import com.intellij.ide.dnd.DnDSupport
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.wm.ToolWindow
@@ -75,8 +76,10 @@ class FileDropHandler(val panel: JPanel,
             val model = tree.model as DefaultTreeModel
             val root = model.root as DefaultMutableTreeNode
 
-            files.forEach { root.add(createNode(it)) }
-            model.reload()
+            ApplicationManager.getApplication().executeOnPooledThread {
+                files.forEach { root.add(createNode(it)) }
+                model.reload()
+            }
         } catch (e: Exception) {
             val jPanel = JTextPane().apply {
                 text = when (e) {
