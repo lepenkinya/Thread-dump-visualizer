@@ -71,28 +71,35 @@ class FileDropHandler(val panel: JPanel,
     }
 
     override fun drop(event: DnDEvent) {
-        try {
-            val files = getTransferable(event)?.getFiles(event) ?: throw DnDException("Can't get files")
-            val model = tree.model as DefaultTreeModel
-            val root = model.root as DefaultMutableTreeNode
+        val application = ApplicationManager.getApplication()
+        val files = getTransferable(event)?.getFiles(event)
 
-            ApplicationManager.getApplication().executeOnPooledThread {
-                files.forEach { root.add(createNode(it)) }
-                model.reload()
-            }
-        } catch (e: Exception) {
-            val jPanel = JTextPane().apply {
-                text = when (e) {
-                    is DnDException -> "${e.message}"
-                    else -> "Unknown exception: ${e.message}"
+        application.apply {
+            executeOnPooledThread {
+                if (files == null) throw DnDException("Can't get files")
+                val model = tree.model as DefaultTreeModel
+                val root = model.root as DefaultMutableTreeNode
+
+                try {
+                    files.forEach { root.add(createNode(it)) }
+                    model.reload()
+                } catch (e: Exception) {
+                    val jPanel = JTextPane().apply {
+                        text = when (e) {
+                            is DnDException -> "${e.message}"
+                            else -> "Unknown exception: ${e.message}"
+                        }
+                        isEditable = false
+                    }
+
+                    invokeLater {
+                        JBPopupFactory.getInstance()
+                                .createComponentPopupBuilder(jPanel, jPanel)
+                                .createPopup()
+                                .showInCenterOf(panel)
+                    }
                 }
-                isEditable = false
             }
-
-            JBPopupFactory.getInstance()
-                    .createComponentPopupBuilder(jPanel, jPanel)
-                    .createPopup()
-                    .showInCenterOf(panel)
         }
     }
 }

@@ -34,6 +34,7 @@ import java.io.InputStream
 import java.util.*
 import javax.swing.JComponent
 import javax.swing.JPanel
+import javax.swing.ScrollPaneConstants
 import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.TreeNode
 
@@ -161,8 +162,13 @@ fun createDiagramComponent(project: Project,
     val stringDiagramProvider = ThreadInfoDiagramProvider(project, file, dumpInfo.getDependencyGraph(), fileContent)
     val builder = UmlGraphBuilderFactory.create(project, stringDiagramProvider, null, null).apply {
         update()
-        view.fitContent()
-        view.updateView()
+        view.apply {
+            fitContent()
+            updateView()
+            horizontalScrollBarPolicy = ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER
+            verticalScrollBarPolicy = ScrollPaneConstants.VERTICAL_SCROLLBAR_NEVER
+            fitContentOnResize = true
+        }
         dataModel.setModelInitializationFinished()
     }
 
@@ -249,7 +255,7 @@ fun openThreadDump(project: Project, dumpInfo: ThreadDumpInfo) {
     val fileEditorManager = FileEditorManager.getInstance(project)
     val file = LightVirtualFile("$dumpInfo", PlainTextFileType.INSTANCE, fileContent.text)
     val textEditor = fileEditorManager.openReadOnly(file, false)
-    val size = Dimension(600, 300)
+    val size = Dimension(600, 250)
     val jPanel = JPanel(GridBagLayout()).apply { preferredSize = size }
     val addContent = Runnable {
         val diagram = createDiagramComponent(project, file, dumpInfo, fileContent).apply { preferredSize = size }
