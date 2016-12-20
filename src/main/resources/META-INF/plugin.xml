@@ -2,7 +2,7 @@
     <id>TypingFreezeAnalyzer</id>
     <name>TypingFreezeAnalyzer</name>
     <version>0.1</version>
-    <vendor email="">dummy</vendor>
+    <vendor email="">csc</vendor>
 
     <description>Typing freeze analyzer plugin</description>
     <change-notes>Initial release of the plugin</change-notes>

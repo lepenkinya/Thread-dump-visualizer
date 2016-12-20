@@ -47,11 +47,14 @@ fun ThreadDumpInfo.findThreadByName(threadName: String?) = threadList.find { it.
 
 fun ThreadDumpInfo.getAWTBlockingThreads(): List<ThreadInfoDigest> {
     val blockingThreads = ArrayList<ThreadInfoDigest>()
+    val isAWTBlockedByRWLock = awtThread.lockName?.contains("ReadMostlyRWLock") ?: false
 
-    threadList.asSequence()
-            .filter { it !== awtThread }
-            .filter { it.isPerformingRunReadAction() && (it.isRunning() || it.lockOwnerName != null) }
-            .forEach { blockingThreads.add(it) }
+    if (isAWTBlockedByRWLock) {
+        threadList.asSequence()
+                .filter { it !== awtThread }
+                .filter { it.isPerformingRunReadAction() && (it.isRunning() || it.lockName != null) }
+                .forEach { blockingThreads.add(it) }
+    }
 
     awtThread.lockOwnerName?.let { blockingThreads.add(findThreadByName(it)!!) }
 
