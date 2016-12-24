@@ -1,11 +1,10 @@
 <idea-plugin>
-    <id>TypingFreezeAnalyzer</id>
-    <name>TypingFreezeAnalyzer</name>
+    <id>ThreadDumpVisualizer</id>
+    <name>ThreadDumpVisualizer</name>
     <version>0.1</version>
     <vendor email="">csc</vendor>
 
-    <description>Typing freeze analyzer plugin</description>
-    <change-notes>Initial release of the plugin</change-notes>
+    <description>Thread dump visualizer plugin</description>
     <idea-version since-build="131"/>
 
     <depends>com.intellij.diagram</depends>
