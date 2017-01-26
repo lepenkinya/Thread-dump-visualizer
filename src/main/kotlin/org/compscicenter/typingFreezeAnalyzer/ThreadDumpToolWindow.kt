@@ -21,25 +21,10 @@ import javax.swing.*
 import javax.swing.tree.*
 
 class ThreadDumpToolWindow : ToolWindowFactory {
-    lateinit var panel: JPanel
-    lateinit var tree: JTree
+    val panel: JPanel
+    val tree: JTree
 
-    override fun init(toolWindow: ToolWindow) {
-        super.init(toolWindow)
-
-        toolWindow.apply { isAutoHide = false }
-    }
-
-    override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
-        tree.apply {
-            addMouseListener(ThreadDumpMouseAdapter(this, project))
-            addKeyListener(ThreadDumpKeyAdapter(this, project))
-        }
-
-        toolWindow.contentManager.apply { addContent(factory.createContent(panel, "", false)) }
-    }
-
-    fun createUIComponents() {
+    init {
         val root = DefaultMutableTreeNode("Thread dumps")
 
         tree = JTree(root).apply {
@@ -58,6 +43,21 @@ class ThreadDumpToolWindow : ToolWindowFactory {
                 .enableAsNativeTarget()
                 .disableAsSource()
                 .install()
+    }
+
+    override fun init(toolWindow: ToolWindow) {
+        super.init(toolWindow)
+
+        toolWindow.apply { isAutoHide = false }
+    }
+
+    override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
+        tree.apply {
+            addMouseListener(ThreadDumpMouseAdapter(this, project))
+            addKeyListener(ThreadDumpKeyAdapter(this, project))
+        }
+
+        toolWindow.contentManager.apply { addContent(factory.createContent(panel, "", false)) }
     }
 }
 
