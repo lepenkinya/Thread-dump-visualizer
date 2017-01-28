@@ -12,9 +12,7 @@ class HighlightTest {
     @Test
     fun `Thread states must be highlighted`() {
         val inputStream = classLoader.getResourceAsStream("good-dump.txt")
-        val dump = inputStream.parseThreadDump()
-
-        val content = createFileContent(dump)
+        val content = inputStream.parseThreadDump().createFileContent()
         val threadStateHighlight = content.highlightInfoList.filter { it.highlightType == HighlightType.THREAD_STATE }
 
         assertEquals(threadStateHighlight.size, 2)

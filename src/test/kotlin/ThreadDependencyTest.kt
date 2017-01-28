@@ -14,7 +14,7 @@ class ThreadDependencyTest {
 
         assertEquals(dependencies.size, 1)
 
-        val (waiting, working) = dependencies[0]
+        val (waiting, working) = dependencies.first()
 
         assertEquals(waiting.name, "AWT-EventQueue-0 2016.3#IU-163.SNAPSHOT IDEA, eap:true")
         assertEquals(working.name, "Java2D Queue Flusher")

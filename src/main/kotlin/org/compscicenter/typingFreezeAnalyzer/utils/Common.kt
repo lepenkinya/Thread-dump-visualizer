@@ -38,12 +38,14 @@ import javax.swing.ScrollPaneConstants
 import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.TreeNode
 
+val lineSeparatorLen = System.lineSeparator().length
+
 fun getReadableState(state: Thread.State) = when (state) {
-    Thread.State.BLOCKED -> "blocked"
+    Thread.State.BLOCKED                             -> "blocked"
     Thread.State.TIMED_WAITING, Thread.State.WAITING -> "waiting on condition"
-    Thread.State.RUNNABLE -> "runnable"
-    Thread.State.NEW -> "new"
-    Thread.State.TERMINATED -> "terminated"
+    Thread.State.RUNNABLE                            -> "runnable"
+    Thread.State.NEW                                 -> "new"
+    Thread.State.TERMINATED                          -> "terminated"
 }
 
 fun printStackTrace(info: ThreadInfoDigest,
@@ -67,8 +69,8 @@ fun dumpThreadInfo(info: ThreadInfoDigest,
 
     highlightThreadState(info, text, highlightInfoList)
 
-    info.lockName?.let { text.append(" on ${info.lockName}") }
-    info.lockOwnerName?.let { text.append(" owned by \"${info.lockOwnerName}\" Id=0x0") }
+    info.lockName?.let { text.append(" on $it") }
+    info.lockOwnerName?.let { text.append(" owned by \"$it\" Id=0x0") }
 
     if (info.suspended) text.append(" (suspended)")
     if (info.inNative) text.append(" (in native)")
@@ -82,8 +84,8 @@ fun addClassLinkInfo(info: ThreadInfoDigest,
                      element: StackTraceElement,
                      text: StringBuilder,
                      classLinkInfoList: MutableList<ClassLinkInfo>) {
-    val startOffset = text.length - 3 - "${element.lineNumber}".length - element.fileName.length
-    val endOffset = text.length - 2
+    val startOffset = text.length - lineSeparatorLen - "${element.lineNumber}".length - element.fileName.length - 2
+    val endOffset = text.length - lineSeparatorLen - 1
     val textAttributes = TextAttributes(JBColor.CYAN, null, JBColor.CYAN, EffectType.LINE_UNDERSCORE, Font.BOLD)
     val highlightInfo = HighlightInfo(info, startOffset, endOffset, textAttributes, HighlightType.LINK)
     val classLinkInfo = ClassLinkInfo(element.className.substringBefore('$'), element.lineNumber, highlightInfo)
@@ -95,8 +97,8 @@ fun highlightRunReadAction(info: ThreadInfoDigest,
                            element: StackTraceElement,
                            text: StringBuilder,
                            highlightInfoList: MutableList<HighlightInfo>) {
-    val startOffset = text.length - "$element".length - 1
-    val endOffset = text.length - 4 - "${element.lineNumber}".length - element.fileName.length
+    val startOffset = text.length - "$element".length - lineSeparatorLen
+    val endOffset = text.length - lineSeparatorLen - "${element.lineNumber}".length - element.fileName.length - 3
     val textAttributes = TextAttributes(JBColor.RED, null, JBColor.RED, EffectType.WAVE_UNDERSCORE, Font.BOLD)
 
     highlightInfoList += HighlightInfo(info, startOffset, endOffset, textAttributes, HighlightType.READ_ACTION)
@@ -105,8 +107,8 @@ fun highlightRunReadAction(info: ThreadInfoDigest,
 fun highlightThreadState(info: ThreadInfoDigest,
                          text: StringBuilder,
                          highlightInfoList: MutableList<HighlightInfo>) {
-    val startOffset = text.length - "${info.threadState}".length - 1
-    val endOffset = text.length - 1
+    val startOffset = text.length - "${info.threadState}".length - lineSeparatorLen
+    val endOffset = text.length - lineSeparatorLen
     val textAttributes = TextAttributes(info.getStateColor(), null, null, null, Font.BOLD)
 
     highlightInfoList += HighlightInfo(info, startOffset, endOffset, textAttributes, HighlightType.THREAD_STATE)
@@ -144,13 +146,12 @@ fun addHighlighters(editor: Editor, highlightInfoList: List<HighlightInfo>) {
     highlightInfoList.forEach { markupModel.addRangeHighlighter(it) }
 }
 
-fun createFileContent(dumpInfo: ThreadDumpInfo): FileContent {
+fun ThreadDumpInfo.createFileContent(): FileContent {
     val text = StringBuilder()
     val linkInfoList = ArrayList<ClassLinkInfo>()
     val highlightInfoList = ArrayList<HighlightInfo>()
 
-    dumpInfo.threadList.asSequence()
-            .forEach { dumpThreadInfo(it, text, linkInfoList, highlightInfoList) }
+    threadList.forEach { dumpThreadInfo(it, text, linkInfoList, highlightInfoList) }
 
     return FileContent("$text", linkInfoList, highlightInfoList)
 }
@@ -178,8 +179,8 @@ fun createDiagramComponent(project: Project,
 fun getTransferable(event: DnDEvent): Transferable? {
     return when (event.attachedObject) {
         is DnDNativeTarget.EventInfo -> (event.attachedObject as DnDNativeTarget.EventInfo).transferable
-        is TransferableWrapper -> event
-        else -> null
+        is TransferableWrapper       -> event
+        else                         -> null
     }
 }
 
@@ -191,7 +192,8 @@ fun createNodeFromMongo(file: File): DefaultMutableTreeNode {
         val mapper = ObjectMapper()
         val prop = mapper.readValue<Map<String, Any>>(file, object : TypeReference<Map<String, Any>>() {})
         val mongoConfig = MongoConfig(prop)
-        val dumps = ThreadDumpDaoMongo(mongoConfig).getAllThreadDumps().sortedByDescending { it.awtThread.weight() }
+        val mongoDao = ThreadDumpDaoMongo(mongoConfig)
+        val dumps = mongoDao.getAllThreadDumps().sortedByDescending { it.awtThread.weight() }
 
         dumps.forEach { root.add(DefaultMutableTreeNode(it)) }
     } catch (e: Exception) {
@@ -251,7 +253,7 @@ fun createNodeFromZip(file: File): DefaultMutableTreeNode {
 }
 
 fun openThreadDump(project: Project, dumpInfo: ThreadDumpInfo) {
-    val fileContent = createFileContent(dumpInfo)
+    val fileContent = dumpInfo.createFileContent()
     val fileEditorManager = FileEditorManager.getInstance(project)
     val file = LightVirtualFile("$dumpInfo", PlainTextFileType.INSTANCE, fileContent.text)
     val textEditor = fileEditorManager.openReadOnly(file, false)

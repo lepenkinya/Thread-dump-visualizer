@@ -111,11 +111,9 @@ object StackTraceElementMatchAction : RegexLineMatchAction() {
                          threadBuilder: ThreadInfoDigest.Builder) {
         val entryPoint = matcher.group("entryPoint")
         val fileInfo = matcher.group("fileInfo")
-
         val dotIndex = entryPoint.lastIndexOf('.')
         val className = entryPoint.substring(0, dotIndex)
         val methodName = entryPoint.substring(dotIndex + 1, entryPoint.length)
-
         val delimiterIdx = fileInfo.indexOf(':')
         val (fileName, lineNumber) = if (delimiterIdx != -1) {
             with(fileInfo) { substring(0, delimiterIdx) to substring(delimiterIdx + 1, length).toInt() }

@@ -131,6 +131,6 @@ class ThreadDumpInfo(val name: String,
 
 fun main(args: Array<String>) {
     ThreadDumpDaoMongo(MongoConfig(dbName = "test")).getAllThreadDumps().forEach {
-        println(createFileContent(it).text)
+        println(it.createFileContent().text)
     }
 }

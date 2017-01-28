@@ -12,19 +12,20 @@ import java.awt.Color
 import java.awt.datatransfer.DataFlavor
 import java.awt.datatransfer.Transferable
 import java.io.File
+import java.lang.Thread.State.*
 import java.util.*
 
 fun ThreadInfoDigest.getStateColor(): Color = when (threadState) {
-    Thread.State.BLOCKED, Thread.State.WAITING, Thread.State.TIMED_WAITING -> Color.RED
-    Thread.State.RUNNABLE -> if (isYielding()) Color.ORANGE else Color.GREEN
-    else -> Color.GREEN
+    BLOCKED, WAITING, TIMED_WAITING -> Color.RED
+    RUNNABLE                        -> if (isYielding()) Color.ORANGE else Color.GREEN
+    else                            -> Color.GREEN
 }
 
 fun ThreadInfoDigest.weight() = when (getStateColor()) {
-    Color.RED -> 3
+    Color.RED    -> 3
     Color.ORANGE -> 2
-    Color.GREEN -> 1
-    else -> 0
+    Color.GREEN  -> 1
+    else         -> 0
 }
 
 fun ThreadInfoDigest.isPerformingRunReadAction() = when (stackTrace) {
@@ -32,9 +33,9 @@ fun ThreadInfoDigest.isPerformingRunReadAction() = when (stackTrace) {
     else -> stackTrace.asSequence().filter { it.methodName != null }.any { it.isPerformingRunReadAction() }
 }
 
-fun ThreadInfoDigest.isYielding() = when {
-    stackTrace == null || stackTrace.isEmpty() || stackTrace[0].methodName == null -> false
-    else -> "yield" in stackTrace[0].methodName
+fun ThreadInfoDigest.isYielding() = when (stackTrace) {
+    null -> false
+    else -> !stackTrace.isEmpty() && (stackTrace[0].methodName?.contains("yield") ?: false)
 }
 
 fun ThreadInfoDigest.isRunning() = threadState == Thread.State.RUNNABLE && !isYielding()
@@ -129,10 +130,10 @@ fun FileContent.getReadActionOffset(threadName: String) = highlightInfoList.asSe
         .find { it.highlightType == HighlightType.READ_ACTION }?.startOffset
 
 fun Color.stringName() = when (this) {
-    Color.RED -> "red"
-    Color.GREEN -> "green"
+    Color.RED    -> "red"
+    Color.GREEN  -> "green"
     Color.ORANGE -> "orange"
-    else -> "undefined"
+    else         -> "undefined"
 }
 
 fun String.initials(): String {
