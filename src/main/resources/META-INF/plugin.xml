@@ -10,6 +10,9 @@
     <depends>com.intellij.diagram</depends>
 
     <extensions defaultExtensionNs="com.intellij">
-        <toolWindow id="Thread dumps" secondary="true" anchor="right" factoryClass="org.compscicenter.typingFreezeAnalyzer.ThreadDumpToolWindow"/>
+        <toolWindow id="Thread dumps"
+                    secondary="true"
+                    anchor="right"
+                    factoryClass="org.compscicenter.threadDumpVisualizer.ToolWindow"/>
     </extensions>
 </idea-plugin>

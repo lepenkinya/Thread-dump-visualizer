@@ -1,4 +1,4 @@
-package org.compscicenter.typingFreezeAnalyzer.utils
+package org.compscicenter.threadDumpVisualizer
 
 import com.fasterxml.jackson.core.type.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -23,7 +23,7 @@ import com.intellij.ui.JBColor
 import com.intellij.uml.UmlGraphBuilderFactory
 import org.apache.commons.compress.archivers.zip.ZipFile
 import org.apache.commons.io.IOUtils
-import org.compscicenter.typingFreezeAnalyzer.*
+import org.compscicenter.threadDumpVisualizer.mongo.ThreadDumpDaoMongo
 import java.awt.Dimension
 import java.awt.Font
 import java.awt.GridBagLayout

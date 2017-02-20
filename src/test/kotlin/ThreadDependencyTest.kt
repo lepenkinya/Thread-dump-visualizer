@@ -1,5 +1,5 @@
-import org.compscicenter.typingFreezeAnalyzer.utils.getDependencyGraph
-import org.compscicenter.typingFreezeAnalyzer.utils.parseThreadDump
+import org.compscicenter.threadDumpVisualizer.getDependencyGraph
+import org.compscicenter.threadDumpVisualizer.parseThreadDump
 import org.junit.Test
 import kotlin.test.assertEquals
 

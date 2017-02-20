@@ -1,9 +1,9 @@
-package org.compscicenter.typingFreezeAnalyzer
+package org.compscicenter.threadDumpVisualizer
 
 import com.intellij.openapi.editor.markup.HighlighterTargetArea
 import com.intellij.openapi.editor.markup.TextAttributes
-import org.compscicenter.typingFreezeAnalyzer.utils.createFileContent
-import org.compscicenter.typingFreezeAnalyzer.utils.isAWTThread
+import org.compscicenter.threadDumpVisualizer.createFileContent
+import org.compscicenter.threadDumpVisualizer.isAWTThread
 import org.mongodb.morphia.annotations.Entity
 import org.mongodb.morphia.annotations.Id
 import org.mongodb.morphia.annotations.Transient
@@ -58,6 +58,8 @@ class ThreadInfoDigest(val threadName: String,
     class Builder {
         lateinit var threadName: String
             private set
+        lateinit var threadState: Thread.State
+            private set
         var lockName: String? = null
             private set
         var lockOwnerName: String? = null
@@ -65,8 +67,6 @@ class ThreadInfoDigest(val threadName: String,
         var inNative: Boolean = false
             private set
         var suspended: Boolean = false
-            private set
-        lateinit var threadState: Thread.State
             private set
         var stackTrace = ArrayList<StackTraceElement>()
             private set
@@ -127,10 +127,4 @@ class ThreadDumpInfo(val name: String,
     }
 
     override fun toString() = name
-}
-
-fun main(args: Array<String>) {
-    ThreadDumpDaoMongo(MongoConfig(dbName = "test")).getAllThreadDumps().forEach {
-        println(it.createFileContent().text)
-    }
 }

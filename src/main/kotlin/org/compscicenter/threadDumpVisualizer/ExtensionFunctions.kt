@@ -1,4 +1,4 @@
-package org.compscicenter.typingFreezeAnalyzer.utils
+package org.compscicenter.threadDumpVisualizer
 
 import com.intellij.ide.dnd.DnDEvent
 import com.intellij.openapi.editor.ex.EditorEx
@@ -7,7 +7,7 @@ import com.intellij.openapi.editor.markup.MarkupModel
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.TextEditor
 import com.intellij.openapi.vfs.VirtualFile
-import org.compscicenter.typingFreezeAnalyzer.*
+import org.compscicenter.threadDumpVisualizer.*
 import java.awt.Color
 import java.awt.datatransfer.DataFlavor
 import java.awt.datatransfer.Transferable
@@ -38,7 +38,7 @@ fun ThreadInfoDigest.isYielding() = when (stackTrace) {
     else -> !stackTrace.isEmpty() && (stackTrace[0].methodName?.contains("yield") ?: false)
 }
 
-fun ThreadInfoDigest.isRunning() = threadState == Thread.State.RUNNABLE && !isYielding()
+fun ThreadInfoDigest.isRunning() = threadState == RUNNABLE && !isYielding()
 
 fun String.isAWTThreadName() = startsWith("AWT-EventQueue")
 

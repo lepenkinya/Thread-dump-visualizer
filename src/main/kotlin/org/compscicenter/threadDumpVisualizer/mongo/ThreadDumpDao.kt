@@ -1,8 +1,10 @@
-package org.compscicenter.typingFreezeAnalyzer
+package org.compscicenter.threadDumpVisualizer.mongo
 
 import com.mongodb.BasicDBObject
 import com.mongodb.MongoClient
 import org.bson.types.ObjectId
+import org.compscicenter.threadDumpVisualizer.MongoConfig
+import org.compscicenter.threadDumpVisualizer.ThreadDumpInfo
 import org.mongodb.morphia.Datastore
 import org.mongodb.morphia.Morphia
 import org.mongodb.morphia.converters.TypeConverter

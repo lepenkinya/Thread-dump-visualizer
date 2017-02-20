@@ -1,18 +1,18 @@
-package org.compscicenter.typingFreezeAnalyzer
+package org.compscicenter.threadDumpVisualizer
 
 import java.util.regex.Matcher
 import java.util.regex.Pattern
 
 object LineMatchAction {
     val list = listOf(ThreadNameMatchAction,
-                      LockMatchAction,
-                      TreadStateMatchAction,
-                      InNativeMatchAction,
-                      SuspendedMatchAction,
-                      StackTraceElementMatchAction)
+            LockMatchAction,
+            TreadStateMatchAction,
+            InNativeMatchAction,
+            SuspendedMatchAction,
+            StackTraceElementMatchAction)
 }
 
-abstract class RegexLineMatchAction() {
+abstract class RegexLineMatchAction {
     abstract val pattern: Pattern
     abstract fun onMatch(matcher: Matcher,
                          dumpBuilder: ThreadDumpInfo.Builder,
@@ -152,8 +152,7 @@ fun String.parseThreadDump(name: String): ThreadDumpInfo {
         if (!line.fireAction(dumpBuilder, threadBuilder)) throw IllegalStateException("line: \"$line\" not parsed")
     }
 
-    return dumpBuilder.run {
-        if (threadInfoStarted) threadInfo(threadBuilder.build())
-        build()
-    }
+    if (threadInfoStarted) dumpBuilder.threadInfo(threadBuilder.build())
+
+    return dumpBuilder.build()
 }

@@ -5,9 +5,7 @@ buildscript {
     dependencies { classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version" }
 }
 
-plugins {
-    id "org.jetbrains.intellij" version "0.2.0"
-}
+plugins { id "org.jetbrains.intellij" version "0.2.5" }
 
 group 'org.compscicenter.practice'
 version '0.1'
@@ -19,8 +17,9 @@ apply plugin: 'org.jetbrains.intellij'
 
 intellij {
     type = 'IU'
-    version = '2016.3.1'
+    version = '2016.3.3'
     plugins = ['uml']
+    updateSinceUntilBuild = false
 }
 
 repositories {

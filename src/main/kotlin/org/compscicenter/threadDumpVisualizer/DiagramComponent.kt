@@ -1,4 +1,4 @@
-package org.compscicenter.typingFreezeAnalyzer
+package org.compscicenter.threadDumpVisualizer
 
 import com.intellij.diagram.*
 import com.intellij.diagram.components.DiagramNodeContainer
@@ -11,7 +11,6 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.ModificationTracker
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ui.JBColor
-import org.compscicenter.typingFreezeAnalyzer.utils.*
 import java.awt.Color
 import java.awt.Point
 import java.awt.Shape
@@ -55,7 +54,6 @@ class ThreadInfoDiagramExtras(val project: Project,
         return EditNodeHandler { diagramNode, diagramPresentationModel ->
             val threadName = diagramNode.identifyingElement.name
             val offset = fileContent.run { getReadActionOffset(threadName) ?: getThreadStateOffset(threadName) ?: 0 }
-//            PropertiesComponent.getInstance().setValue("dump.viewer.last.path", "")
 
             OpenFileDescriptor(project, file, offset).navigate(true)
         }

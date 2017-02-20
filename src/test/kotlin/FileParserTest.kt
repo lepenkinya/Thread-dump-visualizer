@@ -1,5 +1,5 @@
-import org.compscicenter.typingFreezeAnalyzer.utils.findThreadByName
-import org.compscicenter.typingFreezeAnalyzer.utils.parseThreadDump
+import org.compscicenter.threadDumpVisualizer.findThreadByName
+import org.compscicenter.threadDumpVisualizer.parseThreadDump
 import org.junit.Test
 import kotlin.test.assertEquals
 

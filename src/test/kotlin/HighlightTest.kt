@@ -1,7 +1,7 @@
 import org.apache.commons.lang3.EnumUtils
-import org.compscicenter.typingFreezeAnalyzer.HighlightType
-import org.compscicenter.typingFreezeAnalyzer.utils.createFileContent
-import org.compscicenter.typingFreezeAnalyzer.utils.parseThreadDump
+import org.compscicenter.threadDumpVisualizer.HighlightType
+import org.compscicenter.threadDumpVisualizer.createFileContent
+import org.compscicenter.threadDumpVisualizer.parseThreadDump
 import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue

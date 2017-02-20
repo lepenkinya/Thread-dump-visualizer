@@ -1,4 +1,4 @@
-package org.compscicenter.typingFreezeAnalyzer
+package org.compscicenter.threadDumpVisualizer
 
 import com.intellij.ide.dnd.DnDDropHandler
 import com.intellij.ide.dnd.DnDEvent
@@ -8,7 +8,6 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
-import org.compscicenter.typingFreezeAnalyzer.utils.*
 import java.awt.BorderLayout
 import java.awt.Component
 import java.awt.event.KeyAdapter
@@ -20,9 +19,9 @@ import java.io.File
 import javax.swing.*
 import javax.swing.tree.*
 
-class ThreadDumpToolWindow : ToolWindowFactory {
-    val panel: JPanel
-    val tree: JTree
+class ToolWindow : ToolWindowFactory {
+    var panel: JPanel
+    var tree: JTree
 
     init {
         val root = DefaultMutableTreeNode("Thread dumps")

@@ -1,4 +1,4 @@
-package org.compscicenter.typingFreezeAnalyzer
+package org.compscicenter.threadDumpVisualizer.mongo
 
 import org.mongodb.morphia.mapping.DefaultCreator
 import org.mongodb.morphia.mapping.MappingException
