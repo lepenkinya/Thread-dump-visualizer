@@ -62,6 +62,7 @@ class ToolWindow : ToolWindowFactory {
 
 class FileDropHandler(val panel: JPanel,
                       val tree: JTree) : DnDDropHandler {
+
     fun createNode(file: File) = when (file.extension) {
         "dbconf" -> createNodeFromMongo(file)
         "zip" -> createNodeFromZip(file)

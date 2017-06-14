@@ -34,10 +34,12 @@ class ThreadDumpDaoMongo(mongoConfig: MongoConfig) : ThreadDumpDao {
     }
 
     override fun getAllThreadDumps(): List<ThreadDumpInfo> {
-        return dataStore.createQuery(ThreadDumpInfo.Builder::class.java).asList().map { it.build() }
+        return emptyList()
+        //return dataStore.createQuery(ThreadDumpInfo.Builder::class.java).asList().map { it.build() }
     }
 
     override fun getThreadDump(objectId: ObjectId): ThreadDumpInfo {
-        return dataStore.createQuery(ThreadDumpInfo.Builder::class.java).field("objectId").equal(objectId).get().build()
+        return ThreadDumpInfo("", "", "", emptyList())
+        //return dataStore.createQuery(ThreadDumpInfo.Builder::class.java).field("objectId").equal(objectId).get().build()
     }
 }

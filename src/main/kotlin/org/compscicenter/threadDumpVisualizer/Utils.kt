@@ -22,14 +22,12 @@ import com.intellij.testFramework.LightVirtualFile
 import com.intellij.ui.JBColor
 import com.intellij.uml.UmlGraphBuilderFactory
 import org.apache.commons.compress.archivers.zip.ZipFile
-import org.apache.commons.io.IOUtils
 import org.compscicenter.threadDumpVisualizer.mongo.ThreadDumpDaoMongo
 import java.awt.Dimension
 import java.awt.Font
 import java.awt.GridBagLayout
 import java.awt.datatransfer.Transferable
 import java.io.File
-import java.io.FileInputStream
 import java.io.InputStream
 import java.util.*
 import javax.swing.JComponent
@@ -272,7 +270,7 @@ fun openThreadDump(project: Project, dumpInfo: ThreadDumpInfo) {
 
 fun createNodeFromTxt(file: File): DefaultMutableTreeNode {
     val dump = try {
-        FileInputStream(file).parseThreadDump(file.name)
+        //file.readText().parseThreadDump()
     } catch (e: Exception) {
         throw DnDException("Can't parse dump: ${e.message}")
     }
@@ -280,14 +278,8 @@ fun createNodeFromTxt(file: File): DefaultMutableTreeNode {
     return DefaultMutableTreeNode(dump)
 }
 
-fun InputStream.parseThreadDump(name: String = "") = buffered().use {
-    val fileContent = IOUtils.toString(it, "UTF-8")
-
-    fileContent.parseThreadDump(name)
-}
-
 fun InputStream.tryParseThreadDump(name: String = "") = try {
-    parseThreadDump(name)
+    Any()
 } catch (e: Exception) {
     null
 }

@@ -83,48 +83,14 @@ class ThreadInfoDigest(val threadName: String,
     }
 }
 
-class ThreadDumpInfo(val name: String,
-                     val version: String?,
-                     val product: String?,
-                     val buildNumber: String?,
+class ThreadDumpInfo(val version: String,
+                     val product: String,
+                     val buildNumber: String,
                      val threadList: List<ThreadInfoDigest>) {
-    private constructor(builder: Builder) : this(builder.name,
-                                                 builder.version,
-                                                 builder.product,
-                                                 builder.buildNumber,
-                                                 builder.threadInfos)
-
-    @Entity("ThreadDumps")
-    class Builder {
-        @Id
-        lateinit var name: String
-            private set
-        var version: String? = null
-            private set
-        var product: String? = null
-            private set
-        var buildNumber: String? = null
-            private set
-        var threadInfos = ArrayList<ThreadInfoDigest>()
-            private set
-
-        fun name(name: String) = apply { this.name = name }
-        fun version(version: String) = apply { this.version = version }
-        fun product(product: String) = apply { this.product = product }
-        fun buildNumber(buildNumber: String) = apply { this.buildNumber = buildNumber }
-        fun threadInfo(infoDigest: ThreadInfoDigest) = apply { threadInfos.add(infoDigest) }
-
-        fun build(): ThreadDumpInfo {
-            if (threadInfos.isEmpty()) throw IllegalStateException("Thread info list must not be empty")
-
-            return ThreadDumpInfo(this)
-        }
-    }
 
     @delegate:Transient
     val awtThread: ThreadInfoDigest by lazy {
         threadList.find { it.isAWTThread() } ?: throw IllegalStateException("AWT thread is missed")
     }
 
-    override fun toString() = name
 }
