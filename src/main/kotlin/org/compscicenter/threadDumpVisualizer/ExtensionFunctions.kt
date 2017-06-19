@@ -7,7 +7,8 @@ import com.intellij.openapi.editor.markup.MarkupModel
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.TextEditor
 import com.intellij.openapi.vfs.VirtualFile
-import org.compscicenter.threadDumpVisualizer.*
+import intellij.dumps.Dump
+import intellij.dumps.ThreadInfo
 import java.awt.Color
 import java.awt.datatransfer.DataFlavor
 import java.awt.datatransfer.Transferable
@@ -15,43 +16,45 @@ import java.io.File
 import java.lang.Thread.State.*
 import java.util.*
 
-fun ThreadInfoDigest.getStateColor(): Color = when (threadState) {
+fun ThreadInfo.getStateColor(): Color = when (threadState) {
     BLOCKED, WAITING, TIMED_WAITING -> Color.RED
     RUNNABLE                        -> if (isYielding()) Color.ORANGE else Color.GREEN
     else                            -> Color.GREEN
 }
 
-fun ThreadInfoDigest.weight() = when (getStateColor()) {
+fun ThreadInfo.weight() = when (getStateColor()) {
     Color.RED    -> 3
     Color.ORANGE -> 2
     Color.GREEN  -> 1
     else         -> 0
 }
 
-fun ThreadInfoDigest.isPerformingRunReadAction() = when (stackTrace) {
+fun ThreadInfo.isPerformingRunReadAction() = when (stackTrace) {
     null -> false
     else -> stackTrace.asSequence().filter { it.methodName != null }.any { it.isPerformingRunReadAction() }
 }
 
-fun ThreadInfoDigest.isYielding() = when (stackTrace) {
+fun ThreadInfo.isYielding() = when (stackTrace) {
     null -> false
     else -> !stackTrace.isEmpty() && (stackTrace[0].methodName?.contains("yield") ?: false)
 }
 
-fun ThreadInfoDigest.isRunning() = threadState == RUNNABLE && !isYielding()
+fun ThreadInfo.isRunning() = threadState == RUNNABLE && !isYielding()
 
 fun String.isAWTThreadName() = startsWith("AWT-EventQueue")
 
-fun ThreadInfoDigest.isAWTThread() = threadName.isAWTThreadName()
+fun ThreadInfo.isAWTThread() = threadName.isAWTThreadName()
 
-fun ThreadDumpInfo.findThreadByName(threadName: String?) = threadList.find { it.threadName == threadName }
+fun Dump.findThreadByName(threadName: String?) = threads.find { it.threadName == threadName }
 
-fun ThreadDumpInfo.getAWTBlockingThreads(): List<ThreadInfoDigest> {
-    val blockingThreads = ArrayList<ThreadInfoDigest>()
+fun Dump.getAWTBlockingThreads(): List<ThreadInfo> {
+    val awtThread = awtThread() ?: return emptyList()
+
+    val blockingThreads = ArrayList<ThreadInfo>()
     val isAWTBlockedByRWLock = awtThread.lockName?.contains("ReadMostlyRWLock") ?: false
 
     if (isAWTBlockedByRWLock) {
-        threadList.asSequence()
+        threads.asSequence()
                 .filter { it !== awtThread }
                 .filter { it.isPerformingRunReadAction() && (it.isRunning() || it.lockName != null) }
                 .forEach { blockingThreads.add(it) }
@@ -62,7 +65,7 @@ fun ThreadDumpInfo.getAWTBlockingThreads(): List<ThreadInfoDigest> {
     return blockingThreads
 }
 
-fun ThreadDumpInfo.getDependencyChain(thread: ThreadInfoDigest): List<ThreadDumpDependency> {
+fun Dump.getDependencyChain(thread: ThreadInfo): List<ThreadDumpDependency> {
     val res = ArrayList<ThreadDumpDependency>()
     var waiting = thread
 
@@ -76,8 +79,9 @@ fun ThreadDumpInfo.getDependencyChain(thread: ThreadInfoDigest): List<ThreadDump
     return res
 }
 
-fun ThreadDumpInfo.getDependencyGraph(): List<ThreadDumpDependency> {
+fun Dump.getDependencyGraph(): List<ThreadDumpDependency> {
     val dependencyGraph = ArrayList<ThreadDumpDependency>().apply {
+        val awtThread = awtThread() ?: return@apply
         val awtBlockingThreads = getAWTBlockingThreads()
 
         addAll(awtBlockingThreads.map {

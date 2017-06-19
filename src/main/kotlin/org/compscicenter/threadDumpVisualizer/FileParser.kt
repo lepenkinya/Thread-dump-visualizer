@@ -1,10 +1,8 @@
 package org.compscicenter.threadDumpVisualizer
 
-import com.intellij.util.Chunk
 import intellij.dumps.ChunkFactory
 import intellij.dumps.DumpChunk
-import java.util.regex.Matcher
-import java.util.regex.Pattern
+import intellij.dumps.validate
 
 //object LineMatchAction {
 //    val list = listOf(
@@ -39,7 +37,7 @@ import java.util.regex.Pattern
 
 //object ThreadNameMatchAction : RegexLineMatchAction() {
 //    override val pattern = "^\"(?<threadName>.*)\"".toPattern()
-//    val awtPattern = "^AWT-EventQueue.*?(?<version>[\\d.]+)#(?<buildNumber>.*?) (?<product>.*?), eap:(?<eap>.*?).*".toPattern()
+
 //
 //    fun checkAWT(threadName: String, dumpBuilder: ThreadDumpInfo.Builder) {
 //        val awtMatcher = awtPattern.matcher(threadName)
@@ -142,6 +140,33 @@ import java.util.regex.Pattern
 
 
 
+fun String.threadDumpInfo(): Dump? {
+    val chunks = dumpChunks()
+    val result = chunks.validate()
+
+    if (result.isOK) {
+        val threads = result.threads.map { it to it.threadInfoDigest() }
+
+        val awt = threads.find { it.second.isAWTThread() }
+        val info = if (awt == null) ApplicationInfo.EMPTY else info(awt)
+
+        return Dump(info, threads.map { it.second })
+    }
+
+    return null
+}
+
+
+fun info(awt: Pair<List<DumpChunk>, ThreadInfo>): ApplicationInfo {
+    return ApplicationInfo.EMPTY
+}
+
+
+fun List<DumpChunk>.threadInfoDigest(): ThreadInfo {
+    TODO()
+}
+
+
 fun String.dumpChunks(): List<DumpChunk> {
     val chunks = mutableListOf<DumpChunk>()
 
@@ -156,7 +181,3 @@ fun String.dumpChunks(): List<DumpChunk> {
 
     return chunks
 }
-
-
-class UnrecognizedDumpLine(line: String) : Throwable(line)
-

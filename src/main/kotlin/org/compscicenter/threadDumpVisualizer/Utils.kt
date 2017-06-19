@@ -21,6 +21,8 @@ import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.testFramework.LightVirtualFile
 import com.intellij.ui.JBColor
 import com.intellij.uml.UmlGraphBuilderFactory
+import intellij.dumps.Dump
+import intellij.dumps.ThreadInfo
 import org.apache.commons.compress.archivers.zip.ZipFile
 import org.compscicenter.threadDumpVisualizer.mongo.ThreadDumpDaoMongo
 import java.awt.Dimension
@@ -46,7 +48,7 @@ fun getReadableState(state: Thread.State) = when (state) {
     Thread.State.TERMINATED                          -> "terminated"
 }
 
-fun printStackTrace(info: ThreadInfoDigest,
+fun printStackTrace(info: ThreadInfo,
                     text: StringBuilder,
                     classLinkInfoList: MutableList<ClassLinkInfo>,
                     highlightInfoList: MutableList<HighlightInfo>) {
@@ -58,7 +60,7 @@ fun printStackTrace(info: ThreadInfoDigest,
     }
 }
 
-fun dumpThreadInfo(info: ThreadInfoDigest,
+fun dumpThreadInfo(info: ThreadInfo,
                    text: StringBuilder,
                    classLinkInfoList: MutableList<ClassLinkInfo>,
                    highlightInfoList: MutableList<HighlightInfo>) {
@@ -78,7 +80,7 @@ fun dumpThreadInfo(info: ThreadInfoDigest,
     text.appendln()
 }
 
-fun addClassLinkInfo(info: ThreadInfoDigest,
+fun addClassLinkInfo(info: ThreadInfo,
                      element: StackTraceElement,
                      text: StringBuilder,
                      classLinkInfoList: MutableList<ClassLinkInfo>) {
@@ -91,7 +93,7 @@ fun addClassLinkInfo(info: ThreadInfoDigest,
     classLinkInfoList += classLinkInfo
 }
 
-fun highlightRunReadAction(info: ThreadInfoDigest,
+fun highlightRunReadAction(info: ThreadInfo,
                            element: StackTraceElement,
                            text: StringBuilder,
                            highlightInfoList: MutableList<HighlightInfo>) {
@@ -102,7 +104,7 @@ fun highlightRunReadAction(info: ThreadInfoDigest,
     highlightInfoList += HighlightInfo(info, startOffset, endOffset, textAttributes, HighlightType.READ_ACTION)
 }
 
-fun highlightThreadState(info: ThreadInfoDigest,
+fun highlightThreadState(info: ThreadInfo,
                          text: StringBuilder,
                          highlightInfoList: MutableList<HighlightInfo>) {
     val startOffset = text.length - "${info.threadState}".length - lineSeparatorLen
@@ -144,19 +146,19 @@ fun addHighlighters(editor: Editor, highlightInfoList: List<HighlightInfo>) {
     highlightInfoList.forEach { markupModel.addRangeHighlighter(it) }
 }
 
-fun ThreadDumpInfo.createFileContent(): FileContent {
+fun Dump.createFileContent(): FileContent {
     val text = StringBuilder()
     val linkInfoList = ArrayList<ClassLinkInfo>()
     val highlightInfoList = ArrayList<HighlightInfo>()
 
-    threadList.forEach { dumpThreadInfo(it, text, linkInfoList, highlightInfoList) }
+    threads.forEach { dumpThreadInfo(it, text, linkInfoList, highlightInfoList) }
 
     return FileContent("$text", linkInfoList, highlightInfoList)
 }
 
 fun createDiagramComponent(project: Project,
                            file: VirtualFile,
-                           dumpInfo: ThreadDumpInfo,
+                           dumpInfo: Dump,
                            fileContent: FileContent): JComponent {
     val stringDiagramProvider = ThreadInfoDiagramProvider(project, file, dumpInfo.getDependencyGraph(), fileContent)
     val builder = UmlGraphBuilderFactory.create(project, stringDiagramProvider, null, null).apply {
@@ -191,7 +193,7 @@ fun createNodeFromMongo(file: File): DefaultMutableTreeNode {
         val prop = mapper.readValue<Map<String, Any>>(file, object : TypeReference<Map<String, Any>>() {})
         val mongoConfig = MongoConfig(prop)
         val mongoDao = ThreadDumpDaoMongo(mongoConfig)
-        val dumps = mongoDao.getAllThreadDumps().sortedByDescending { it.awtThread.weight() }
+        val dumps = mongoDao.getAllThreadDumps().sortedByDescending { it.awtThread()?.weight() }
 
         dumps.forEach { root.add(DefaultMutableTreeNode(it)) }
     } catch (e: Exception) {
@@ -250,7 +252,7 @@ fun createNodeFromZip(file: File): DefaultMutableTreeNode {
     return root
 }
 
-fun openThreadDump(project: Project, dumpInfo: ThreadDumpInfo) {
+fun openThreadDump(project: Project, dumpInfo: Dump) {
     val fileContent = dumpInfo.createFileContent()
     val fileEditorManager = FileEditorManager.getInstance(project)
     val file = LightVirtualFile("$dumpInfo", PlainTextFileType.INSTANCE, fileContent.text)

@@ -113,7 +113,7 @@ object ThreadDumpTreeCellRenderer : DefaultTreeCellRenderer() {
                                               row: Int,
                                               hasFocus: Boolean): Component {
         val renderer = super.getTreeCellRendererComponent(tree, value, selected, expanded, leaf, row, hasFocus)
-        val info = (value as? DefaultMutableTreeNode)?.userObject as? ThreadDumpInfo
+        val info = (value as? DefaultMutableTreeNode)?.userObject as? Dump
 
         if (info != null) {
             val iconColor = info.awtThread.getStateColor().stringName()
@@ -146,7 +146,7 @@ class ThreadDumpKeyAdapter(private val jTree: JTree,
             VK_ENTER -> {
                 selectionPaths.asSequence()
                         .map { it.lastPathComponent as DefaultMutableTreeNode }
-                        .mapNotNull { it.userObject as? ThreadDumpInfo }
+                        .mapNotNull { it.userObject as? Dump }
                         .forEach { openThreadDump(project, it) }
             }
         }
@@ -157,7 +157,7 @@ class ThreadDumpMouseAdapter(private val jTree: JTree,
                              private val project: Project) : MouseAdapter() {
     override fun mouseClicked(e: MouseEvent) {
         val node = jTree.lastSelectedPathComponent as? DefaultMutableTreeNode ?: return
-        val dumpInfo = node.userObject as? ThreadDumpInfo ?: return
+        val dumpInfo = node.userObject as? Dump ?: return
 
         if (e.clickCount == 2) openThreadDump(project, dumpInfo)
     }

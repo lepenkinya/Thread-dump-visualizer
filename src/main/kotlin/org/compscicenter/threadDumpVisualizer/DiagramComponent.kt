@@ -11,6 +11,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.ModificationTracker
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ui.JBColor
+import intellij.dumps.ThreadInfo
 import java.awt.Color
 import java.awt.Point
 import java.awt.Shape
@@ -73,12 +74,12 @@ class ThreadInfoDiagramExtras(val project: Project,
 
 data class ThreadPresentation(val name: String,
                               val color: Color) {
-    constructor(threadInfo: ThreadInfoDigest) : this(threadInfo.threadName, threadInfo.getStateColor())
+    constructor(threadInfo: ThreadInfo) : this(threadInfo.threadName, threadInfo.getStateColor())
 }
 
 data class ThreadDumpDependency(val waiting: ThreadPresentation,
                                 val working: ThreadPresentation) {
-    constructor(waiting: ThreadInfoDigest, working: ThreadInfoDigest) : this(ThreadPresentation(waiting), ThreadPresentation(working))
+    constructor(waiting: ThreadInfo, working: ThreadInfo) : this(ThreadPresentation(waiting), ThreadPresentation(working))
 }
 
 class ThreadInfoNode(val threadInfo: ThreadPresentation,

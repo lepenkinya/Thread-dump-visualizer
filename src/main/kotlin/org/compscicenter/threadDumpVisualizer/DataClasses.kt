@@ -2,12 +2,8 @@ package org.compscicenter.threadDumpVisualizer
 
 import com.intellij.openapi.editor.markup.HighlighterTargetArea
 import com.intellij.openapi.editor.markup.TextAttributes
-import org.compscicenter.threadDumpVisualizer.createFileContent
-import org.compscicenter.threadDumpVisualizer.isAWTThread
-import org.mongodb.morphia.annotations.Entity
-import org.mongodb.morphia.annotations.Id
-import org.mongodb.morphia.annotations.Transient
-import java.util.*
+import intellij.dumps.Dump
+import intellij.dumps.ThreadInfo
 
 enum class HighlightType {
     LINK,
@@ -19,7 +15,7 @@ class ClassLinkInfo(val className: String,
                     val lineNumber: Int,
                     val highlightInfo: HighlightInfo)
 
-class HighlightInfo(val threadInfo: ThreadInfoDigest,
+class HighlightInfo(val threadInfo: ThreadInfo,
                     val startOffset: Int,
                     val endOffset: Int,
                     val textAttributes: TextAttributes,
@@ -39,58 +35,6 @@ class MongoConfig(map: Map<String, Any>) {
     val dbName: String by map
 }
 
-class ThreadInfoDigest(val threadName: String,
-                       val lockName: String?,
-                       val lockOwnerName: String?,
-                       val inNative: Boolean,
-                       val suspended: Boolean,
-                       val threadState: Thread.State,
-                       val stackTrace: List<StackTraceElement>?) {
-    private constructor(builder: Builder) :
-            this(builder.threadName,
-                 builder.lockName,
-                 builder.lockOwnerName,
-                 builder.inNative,
-                 builder.suspended,
-                 builder.threadState,
-                 builder.stackTrace)
 
-    class Builder {
-        lateinit var threadName: String
-            private set
-        lateinit var threadState: Thread.State
-            private set
-        var lockName: String? = null
-            private set
-        var lockOwnerName: String? = null
-            private set
-        var inNative: Boolean = false
-            private set
-        var suspended: Boolean = false
-            private set
-        var stackTrace = ArrayList<StackTraceElement>()
-            private set
 
-        fun threadName(threadName: String) = apply { this.threadName = threadName }
-        fun lockName(lockName: String?) = apply { this.lockName = lockName }
-        fun lockOwnerName(lockOwnerName: String?) = apply { this.lockOwnerName = lockOwnerName }
-        fun inNative(inNative: Boolean) = apply { this.inNative = inNative }
-        fun suspended(suspended: Boolean) = apply { this.suspended = suspended }
-        fun threadState(threadState: Thread.State) = apply { this.threadState = threadState }
-        fun stackTrace(stackTraceElement: StackTraceElement) = apply { stackTrace.add(stackTraceElement) }
-
-        fun build() = ThreadInfoDigest(this)
-    }
-}
-
-class ThreadDumpInfo(val version: String,
-                     val product: String,
-                     val buildNumber: String,
-                     val threadList: List<ThreadInfoDigest>) {
-
-    @delegate:Transient
-    val awtThread: ThreadInfoDigest by lazy {
-        threadList.find { it.isAWTThread() } ?: throw IllegalStateException("AWT thread is missed")
-    }
-
-}
+fun Dump.awtThread(): ThreadInfo? = threads.find { it.isAWTThread() }
